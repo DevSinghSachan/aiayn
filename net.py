@@ -525,6 +525,7 @@ class Transformer(object):
         eos_flags = self.xp.zeros((batch,), dtype=x_block.dtype)
         result = []
         for i in range(max_length):
+            # print(i)
             log_prob_tail = self(x_block, y_block, y_block,
                                  get_prediction=True)
             ys = self.xp.argmax(log_prob_tail.npvalue(), axis=0).astype('i')

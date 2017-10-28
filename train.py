@@ -23,6 +23,20 @@ import net
 from subfuncs import VaswaniRule
 
 
+class AIAYNAdamTrainer(object):
+    def __init__(self, param_col, learning_rate=1, dim=512, warmup_steps=4000, beta_1=0.9, beta_2=0.999, eps=1e-8):
+        self.optimizer = dy.AdamTrainer(param_col, alpha=learning_rate, beta_1=beta_1, beta_2=beta_2, eps=eps)
+        self.dim = dim
+        self.warmup_steps = warmup_steps
+        self.steps = 0
+
+    def update(self):
+        self.steps += 1
+        decay = (self.dim ** (-0.5)) * np.min([self.steps ** (-0.5), self.steps * (self.warmup_steps ** (-1.5))])
+        self.optimizer.learning_rate = 1 * decay
+        self.optimizer.update()
+
+
 def seq2seq_pad_concat_convert(xy_batch, device, eos_id=0, bos_id=2):
     """
     Args:
@@ -100,6 +114,7 @@ class CalculateBleu():
         references = []
         hypotheses = []
         for i in range(0, len(self.test_data), self.batch):
+            # print(i)
             sources, targets = zip(*self.test_data[i:i + self.batch])
             references.extend([[t.tolist()] for t in targets])
 
@@ -210,7 +225,8 @@ def main():
                             embed_position=args.embed_position)
 
     # Setup Optimizer
-    optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
+    # optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
+    optimizer = AIAYNAdamTrainer(dy_model)
 
     # CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize // 4)()
 
@@ -234,8 +250,10 @@ def main():
         optimizer.update()
 
         print(
-            'epoch:{:02f}/{:02d} train_loss:{:.04f} '.format(train_iter.epoch_detail, train_iter.epoch + 1,
-                                                             loss.value()))
+            'epoch:{:02f}/{:02d}\ttrain_loss:{:.04f}\tlr:{}'.format(train_iter.epoch_detail,
+                                                                         train_iter.epoch + 1,
+                                                                         loss.value(),
+                                                                         optimizer.optimizer.learning_rate))
 
         # Check the validation accuracy of prediction after every epoch
         if train_iter.is_new_epoch:  # If this iteration is the final iteration of the current epoch
