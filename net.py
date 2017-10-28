@@ -36,16 +36,19 @@ class Linear(object):
         self.W1 = dy_model.add_parameters((output_dim, input_dim))
         self.b1 = dy_model.add_parameters(output_dim)
 
-    def __call__(self, input_expr, reconstruct_shape=True):
+    def __call__(self, input_expr, reconstruct_shape=True, timedistributed=False):
         W1 = dy.parameter(self.W1)
         b1 = dy.parameter(self.b1)
 
-        (_, seq_len), batch_size = input_expr.dim()
-        input = TimeDistributed()(input_expr)
+        if not timedistributed:
+            input = TimeDistributed()(input_expr)
+        else:
+            input = input_expr
         output = dy.affine_transform([b1, W1, input])
 
         if not reconstruct_shape:
             return output
+        (_, seq_len), batch_size = input_expr.dim()
         return ReverseTimeDistributed()(output, seq_len, batch_size)
 
 
@@ -235,7 +238,12 @@ class MultiHeadAttention():
         batch_A = (dy.transpose(batch_Q) * batch_K) * self.scale_score
         batch_A = dy.cmult(batch_A, mask) + (1 - mask)*MIN_VALUE
 
-        batch_A = dy.transpose(dy.softmax(dy.transpose(batch_A)))
+        sent_len = batch_A.dim()[0][0]
+        if sent_len == 1:
+            batch_A = dy.softmax(batch_A)
+        else:
+            batch_A = dy.transpose(dy.softmax(dy.transpose(batch_A)))
+
         batch_A = dy.cmult(batch_A, mask)
         assert (batch_A.dim() == ((n_querys, n_keys), batch * h))
 
@@ -423,8 +431,9 @@ class Transformer(object):
             history_mask, (batch, length, length))
         return history_mask
 
-    #def output(self, h_block):
-
+    def output(self, h_block):
+        concat_logit_block = self.output_affine(h_block, reconstruct_shape=False, timedistributed=True)
+        return concat_logit_block
 
     def output_and_loss(self, h_block, t_block):
         (units, length), batch = h_block.dim()
@@ -498,7 +507,9 @@ class Transformer(object):
         # (batch, n_units, y_length)
 
         if get_prediction:
-            return self.output(h_block[:, :, -1])
+            y_len = h_block.dim()[0][1]
+            last_col = dy.pick(h_block, dim=1, index=y_len-1)
+            return self.output(last_col)
         else:
             return self.output_and_loss(h_block, y_out_block)
 
@@ -516,7 +527,7 @@ class Transformer(object):
         for i in range(max_length):
             log_prob_tail = self(x_block, y_block, y_block,
                                  get_prediction=True)
-            ys = self.xp.argmax(log_prob_tail.data, axis=1).astype('i')
+            ys = self.xp.argmax(log_prob_tail.npvalue(), axis=0).astype('i')
             result.append(ys)
             y_block = F.concat([y_block, ys[:, None]], axis=1).data
             eos_flags += (ys == 0)

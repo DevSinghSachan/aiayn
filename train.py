@@ -86,7 +86,6 @@ def source_pad_concat_convert(x_seqs, device, eos_id=0, bos_id=2):
 
 class CalculateBleu():
     trigger = 1, 'epoch'
-    priority = chainer.training.PRIORITY_WRITER
 
     def __init__(self, model, test_data, key, batch=50, device=-1, max_length=50):
         self.model = model
@@ -110,11 +109,9 @@ class CalculateBleu():
             # greedy generation for efficiency
             hypotheses.extend(ys)
 
-        bleu = bleu_score.corpus_bleu(
-            references, hypotheses,
-            smoothing_function=bleu_score.SmoothingFunction().method1) * 100
+        bleu = bleu_score.corpus_bleu(references, hypotheses,
+                                      smoothing_function=bleu_score.SmoothingFunction().method1) * 100
         print('BLEU:', bleu)
-        reporter.report({self.key: bleu})
 
 
 def main():
@@ -215,7 +212,7 @@ def main():
     # Setup Optimizer
     optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
 
-    CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize // 4)()
+    # CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize // 4)()
 
     # Setup Trainer
     train_iter = chainer.iterators.SerialIterator(train_data, args.batchsize)
@@ -237,7 +234,8 @@ def main():
         optimizer.update()
 
         print(
-        'epoch:{:02f}/{:02d} train_loss:{:.04f} '.format(train_iter.epoch_detail, train_iter.epoch + 1, loss.value()))
+            'epoch:{:02f}/{:02d} train_loss:{:.04f} '.format(train_iter.epoch_detail, train_iter.epoch + 1,
+                                                             loss.value()))
 
         # Check the validation accuracy of prediction after every epoch
         if train_iter.is_new_epoch:  # If this iteration is the final iteration of the current epoch
@@ -261,7 +259,8 @@ def main():
                     break
 
             print('val_loss:{:.04f}'.format(np.mean(test_losses)))
-        CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize // 4)
+
+            CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize // 4)()
 
     ############################################################
 
