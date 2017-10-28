@@ -4,7 +4,7 @@ import numpy as np
 import dynet as dy
 
 import chainer
-from chainer import cuda
+# from chainer import cuda
 import chainer.functions as F
 import chainer.links as L
 from chainer import reporter
@@ -535,7 +535,8 @@ class Transformer(object):
             if self.xp.all(eos_flags):
                 break
 
-        result = cuda.to_cpu(self.xp.stack(result).T)
+        # result = cuda.to_cpu(self.xp.stack(result).T)
+        result = self.xp.stack(result).T
 
         # Remove EOS taggs
         outs = []

@@ -11,11 +11,8 @@ import numpy
 import six
 
 import chainer
-from chainer import cuda
+# from chainer import cuda
 from chainer.dataset import convert
-from chainer import reporter
-from chainer import training
-from chainer.training import extensions
 
 import preprocess
 import net
@@ -63,7 +60,8 @@ def seq2seq_pad_concat_convert(xy_batch, device, eos_id=0, bos_id=2):
 
     x_block = convert.concat_examples(x_seqs, device, padding=-1)
     y_block = convert.concat_examples(y_seqs, device, padding=-1)
-    xp = cuda.get_array_module(x_block)
+    # xp = cuda.get_array_module(x_block)
+    xp = np
 
     # The paper did not mention eos
     # add eos
@@ -86,7 +84,8 @@ def seq2seq_pad_concat_convert(xy_batch, device, eos_id=0, bos_id=2):
 
 def source_pad_concat_convert(x_seqs, device, eos_id=0, bos_id=2):
     x_block = convert.concat_examples(x_seqs, device, padding=-1)
-    xp = cuda.get_array_module(x_block)
+    # xp = cuda.get_array_module(x_block)
+    xp = np
 
     # add eos
     x_block = xp.pad(x_block, ((0, 0), (0, 1)),
