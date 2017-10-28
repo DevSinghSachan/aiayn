@@ -423,6 +423,9 @@ class Transformer(object):
             history_mask, (batch, length, length))
         return history_mask
 
+    #def output(self, h_block):
+
+
     def output_and_loss(self, h_block, t_block):
         (units, length), batch = h_block.dim()
 
@@ -472,6 +475,7 @@ class Transformer(object):
         return loss
 
     def __call__(self, x_block, y_in_block, y_out_block, get_prediction=False):
+        dy.renew_cg()
         batch, x_length = x_block.shape
         batch, y_length = y_in_block.shape
 
@@ -503,25 +507,21 @@ class Transformer(object):
             return self.translate_beam(x_block, max_length, beam)
 
         # TODO: efficient inference by re-using result
-        with chainer.no_backprop_mode():
-            with chainer.using_config('train', False):
-                x_block = source_pad_concat_convert(
-                    x_block, device=None)
-                batch, x_length = x_block.shape
-                # y_block = self.xp.zeros((batch, 1), dtype=x_block.dtype)
-                y_block = self.xp.full(
-                    (batch, 1), 2, dtype=x_block.dtype)  # bos
-                eos_flags = self.xp.zeros((batch,), dtype=x_block.dtype)
-                result = []
-                for i in range(max_length):
-                    log_prob_tail = self(x_block, y_block, y_block,
-                                         get_prediction=True)
-                    ys = self.xp.argmax(log_prob_tail.data, axis=1).astype('i')
-                    result.append(ys)
-                    y_block = F.concat([y_block, ys[:, None]], axis=1).data
-                    eos_flags += (ys == 0)
-                    if self.xp.all(eos_flags):
-                        break
+        x_block = source_pad_concat_convert(x_block, device=None)
+        batch, x_length = x_block.shape
+        # y_block = self.xp.zeros((batch, 1), dtype=x_block.dtype)
+        y_block = self.xp.full((batch, 1), 2, dtype=x_block.dtype)  # bos
+        eos_flags = self.xp.zeros((batch,), dtype=x_block.dtype)
+        result = []
+        for i in range(max_length):
+            log_prob_tail = self(x_block, y_block, y_block,
+                                 get_prediction=True)
+            ys = self.xp.argmax(log_prob_tail.data, axis=1).astype('i')
+            result.append(ys)
+            y_block = F.concat([y_block, ys[:, None]], axis=1).data
+            eos_flags += (ys == 0)
+            if self.xp.all(eos_flags):
+                break
 
         result = cuda.to_cpu(self.xp.stack(result).T)
 
@@ -535,7 +535,6 @@ class Transformer(object):
                 y = np.array([1], 'i')
             outs.append(y)
         return outs
-
 
     def translate_beam(self, x_block, max_length=50, beam=5):
         # TODO: efficient inference by re-using result

@@ -84,13 +84,11 @@ def source_pad_concat_convert(x_seqs, device, eos_id=0, bos_id=2):
     return x_block
 
 
-class CalculateBleu(chainer.training.Extension):
-
+class CalculateBleu():
     trigger = 1, 'epoch'
     priority = chainer.training.PRIORITY_WRITER
 
-    def __init__(
-            self, model, test_data, key, batch=50, device=-1, max_length=50):
+    def __init__(self, model, test_data, key, batch=50, device=-1, max_length=50):
         self.model = model
         self.test_data = test_data
         self.key = key
@@ -98,23 +96,19 @@ class CalculateBleu(chainer.training.Extension):
         self.device = device
         self.max_length = max_length
 
-    def __call__(self, trainer):
+    def __call__(self):
         print('## Calculate BLEU')
-        with chainer.no_backprop_mode():
-            with chainer.using_config('train', False):
-                references = []
-                hypotheses = []
-                for i in range(0, len(self.test_data), self.batch):
-                    sources, targets = zip(*self.test_data[i:i + self.batch])
-                    references.extend([[t.tolist()] for t in targets])
+        references = []
+        hypotheses = []
+        for i in range(0, len(self.test_data), self.batch):
+            sources, targets = zip(*self.test_data[i:i + self.batch])
+            references.extend([[t.tolist()] for t in targets])
 
-                    sources = [
-                        chainer.dataset.to_device(self.device, x) for x in sources]
-                    ys = [y.tolist()
-                          for y in self.model.translate(
-                        sources, self.max_length, beam=False)]
-                    # greedy generation for efficiency
-                    hypotheses.extend(ys)
+            sources = [chainer.dataset.to_device(self.device, x) for x in sources]
+
+            ys = [y.tolist() for y in self.model.translate(sources, self.max_length, beam=False)]
+            # greedy generation for efficiency
+            hypotheses.extend(ys)
 
         bleu = bleu_score.corpus_bleu(
             references, hypotheses,
@@ -177,11 +171,11 @@ def main():
     # Check file
     en_path = os.path.join(args.input, args.source)
     source_vocab = ['<eos>', '<unk>', '<bos>'] + \
-        preprocess.count_words(en_path, args.source_vocab)
+                   preprocess.count_words(en_path, args.source_vocab)
     source_data = preprocess.make_dataset(en_path, source_vocab)
     fr_path = os.path.join(args.input, args.target)
     target_vocab = ['<eos>', '<unk>', '<bos>'] + \
-        preprocess.count_words(fr_path, args.target_vocab)
+                   preprocess.count_words(fr_path, args.target_vocab)
     target_data = preprocess.make_dataset(fr_path, target_vocab)
     assert len(source_data) == len(target_data)
     print('Original training data size: %d' % len(source_data))
@@ -205,34 +199,23 @@ def main():
     source_words = {i: w for w, i in source_ids.items()}
 
     dy_model = dy.Model()
+
     # Define Model
     model = net.Transformer(dy_model,
-        args.layer,
-        min(len(source_ids), len(source_words)),
-        min(len(target_ids), len(target_words)),
-        args.unit,
-        h=args.head,
-        dropout=args.dropout,
-        max_length=500,
-        use_label_smoothing=args.use_label_smoothing,
-        embed_position=args.embed_position)
-
-    # if args.gpu >= 0:
-    #     chainer.cuda.get_device(args.gpu).use()
-    #     model.to_gpu(args.gpu)
+                            args.layer,
+                            min(len(source_ids), len(source_words)),
+                            min(len(target_ids), len(target_words)),
+                            args.unit,
+                            h=args.head,
+                            dropout=args.dropout,
+                            max_length=500,
+                            use_label_smoothing=args.use_label_smoothing,
+                            embed_position=args.embed_position)
 
     # Setup Optimizer
     optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
 
-
-    # optimizer = chainer.optimizers.Adam(
-    #     alpha=5e-5,
-    #     beta1=0.9,
-    #     beta2=0.98,
-    #     eps=1e-9
-    # )
-
-    # optimizer.setup(model)
+    CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize // 4)()
 
     # Setup Trainer
     train_iter = chainer.iterators.SerialIterator(train_data, args.batchsize)
@@ -243,7 +226,7 @@ def main():
     print('Number of iter/epoch =', iter_per_epoch)
 
     while train_iter.epoch < args.epoch:
-        dy.renew_cg()
+        # dy.renew_cg()
         # ---------- One iteration of the training loop ----------
         # Dynet Training Code:
         train_batch = train_iter.next()
@@ -253,13 +236,14 @@ def main():
         loss.backward()
         optimizer.update()
 
-        print('epoch:{:02f}/{:02d} train_loss:{:.04f} '.format(train_iter.epoch_detail, train_iter.epoch + 1, loss.value()))
+        print(
+        'epoch:{:02f}/{:02d} train_loss:{:.04f} '.format(train_iter.epoch_detail, train_iter.epoch + 1, loss.value()))
 
         # Check the validation accuracy of prediction after every epoch
         if train_iter.is_new_epoch:  # If this iteration is the final iteration of the current epoch
             test_losses = []
             while True:
-                dy.renew_cg()
+                # dy.renew_cg()
                 test_batch = test_iter.next()
                 in_arrays = seq2seq_pad_concat_convert(test_batch, args.gpu)
 
@@ -277,51 +261,10 @@ def main():
                     break
 
             print('val_loss:{:.04f}'.format(np.mean(test_losses)))
-
+        CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize // 4)
 
     ############################################################
 
-    def floor_step(trigger):
-        floored = trigger[0] - trigger[0] % log_trigger[0]
-        if floored <= 0:
-            floored = trigger[0]
-        return (floored, trigger[1])
-
-    # Validation every half epoch
-    eval_trigger = floor_step((iter_per_epoch // 2, 'iteration'))
-    record_trigger = training.triggers.MinValueTrigger(
-        'val/main/perp', eval_trigger)
-
-    # Use Vaswan's magical rule of learning rate(Eq. 3 in the paper)
-    # But, the hyperparamter in the paper seems to work well
-    # only with a large batchsize.
-    # If you run on popular setup (e.g. size=48 on 1 GPU),
-    # you may have to change the hyperparamter.
-    # I scaled learning rate by 0.5 consistently.
-    # ("scale" is always multiplied to learning rate.)
-
-    # If you use a shallow layer network (<=2),
-    # you may not have to change it from the paper setting.
-    if not args.use_fixed_lr:
-        trainer.extend(
-            VaswaniRule('alpha', d=args.unit, warmup_steps=4000, scale=1.),
-            # VaswaniRule('alpha', d=args.unit, warmup_steps=32000, scale=1.),
-            # VaswaniRule('alpha', d=args.unit, warmup_steps=4000, scale=0.5),
-            # VaswaniRule('alpha', d=args.unit, warmup_steps=16000, scale=1.),
-            # VaswaniRule('alpha', d=args.unit, warmup_steps=64000, scale=1.),
-            trigger=(1, 'iteration'))
-    observe_alpha = extensions.observe_value(
-        'alpha',
-        lambda trainer: trainer.updater.get_optimizer('main').alpha)
-    trainer.extend(
-        observe_alpha,
-        trigger=(1, 'iteration'))
-
-    # Only if a model gets best validation score,
-    # save (overwrite) the model
-    trainer.extend(extensions.snapshot_object(
-        model, 'best_model.npz'),
-        trigger=record_trigger)
 
     def translate_one(source, target):
         words = preprocess.split_sentence(source)
@@ -348,35 +291,6 @@ def main():
         source = ' '.join([source_words[i] for i in source])
         target = ' '.join([target_words[i] for i in target])
         translate_one(source, target)
-
-    # Gereneration Test
-    trainer.extend(
-        translate,
-        trigger=(min(200, iter_per_epoch), 'iteration'))
-
-    # Calculate BLEU every half epoch
-    if not args.no_bleu:
-        trainer.extend(
-            CalculateBleu(
-                model, test_data, 'val/main/bleu',
-                device=args.gpu, batch=args.batchsize // 4),
-            trigger=floor_step((iter_per_epoch // 2, 'iteration')))
-
-    # Log
-    trainer.extend(extensions.LogReport(trigger=log_trigger),
-                   trigger=log_trigger)
-    trainer.extend(extensions.PrintReport(
-        ['epoch', 'iteration',
-         'main/loss', 'val/main/loss',
-         'main/perp', 'val/main/perp',
-         'main/acc', 'val/main/acc',
-         'val/main/bleu',
-         'alpha',
-         'elapsed_time']),
-        trigger=log_trigger)
-
-    print('start training')
-    trainer.run()
 
 
 if __name__ == '__main__':
