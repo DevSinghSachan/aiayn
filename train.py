@@ -5,23 +5,16 @@ import json
 import os.path
 import dynet as dy
 import numpy as np
-
 from nltk.translate import bleu_score
-import numpy
 import six
-
 import chainer
-# from chainer import cuda
 from chainer.dataset import convert
-
 import preprocess
 import net
 
-from subfuncs import VaswaniRule
-
 
 class AIAYNAdamTrainer(object):
-    def __init__(self, param_col, learning_rate=1, dim=512, warmup_steps=4000, beta_1=0.9, beta_2=0.999, eps=1e-8):
+    def __init__(self, param_col, learning_rate=1.0, dim=512, warmup_steps=4000, beta_1=0.9, beta_2=0.98, eps=1e-9):
         self.optimizer = dy.AdamTrainer(param_col, alpha=learning_rate, beta_1=beta_1, beta_2=beta_2, eps=eps)
         self.dim = dim
         self.warmup_steps = warmup_steps
@@ -60,7 +53,6 @@ def seq2seq_pad_concat_convert(xy_batch, device, eos_id=0, bos_id=2):
 
     x_block = convert.concat_examples(x_seqs, device, padding=-1)
     y_block = convert.concat_examples(y_seqs, device, padding=-1)
-    # xp = cuda.get_array_module(x_block)
     xp = np
 
     # The paper did not mention eos
@@ -84,7 +76,6 @@ def seq2seq_pad_concat_convert(xy_batch, device, eos_id=0, bos_id=2):
 
 def source_pad_concat_convert(x_seqs, device, eos_id=0, bos_id=2):
     x_block = convert.concat_examples(x_seqs, device, padding=-1)
-    # xp = cuda.get_array_module(x_block)
     xp = np
 
     # add eos
@@ -97,9 +88,7 @@ def source_pad_concat_convert(x_seqs, device, eos_id=0, bos_id=2):
     return x_block
 
 
-class CalculateBleu():
-    trigger = 1, 'epoch'
-
+class CalculateBleu(object):
     def __init__(self, model, test_data, key, batch=50, device=-1, max_length=50):
         self.model = model
         self.test_data = test_data
@@ -113,11 +102,11 @@ class CalculateBleu():
         references = []
         hypotheses = []
         for i in range(0, len(self.test_data), self.batch):
-            # print(i)
             sources, targets = zip(*self.test_data[i:i + self.batch])
             references.extend([[t.tolist()] for t in targets])
 
-            sources = [chainer.dataset.to_device(self.device, x) for x in sources]
+            # sources = [chainer.dataset.to_device(self.device, x) for x in sources]
+            sources = [x for x in sources]
 
             ys = [y.tolist() for y in self.model.translate(sources, self.max_length, beam=False)]
             # greedy generation for efficiency
@@ -180,26 +169,28 @@ def main():
     print(json.dumps(args.__dict__, indent=4))
 
     # Check file
-    en_path = os.path.join(args.input, args.source)
-    source_vocab = ['<eos>', '<unk>', '<bos>'] + \
-                   preprocess.count_words(en_path, args.source_vocab)
-    source_data = preprocess.make_dataset(en_path, source_vocab)
-    fr_path = os.path.join(args.input, args.target)
-    target_vocab = ['<eos>', '<unk>', '<bos>'] + \
-                   preprocess.count_words(fr_path, args.target_vocab)
-    target_data = preprocess.make_dataset(fr_path, target_vocab)
+    src_path = os.path.join(args.input, args.source)
+    source_vocab = ['<eos>', '<unk>', '<bos>'] + preprocess.count_words(src_path, args.source_vocab)
+    source_data = preprocess.make_dataset(src_path, source_vocab)
+
+    tar_path = os.path.join(args.input, args.target)
+    target_vocab = ['<eos>', '<unk>', '<bos>'] + preprocess.count_words(tar_path, args.target_vocab)
+    target_data = preprocess.make_dataset(tar_path, target_vocab)
+
     assert len(source_data) == len(target_data)
+
     print('Original training data size: %d' % len(source_data))
     train_data = [(s, t)
                   for s, t in six.moves.zip(source_data, target_data)
                   if 0 < len(s) < 50 and 0 < len(t) < 50]
     print('Filtered training data size: %d' % len(train_data))
 
-    en_path = os.path.join(args.input, args.source_valid)
-    source_data = preprocess.make_dataset(en_path, source_vocab)
-    fr_path = os.path.join(args.input, args.target_valid)
-    target_data = preprocess.make_dataset(fr_path, target_vocab)
+    src_path = os.path.join(args.input, args.source_valid)
+    source_data = preprocess.make_dataset(src_path, source_vocab)
+    tar_path = os.path.join(args.input, args.target_valid)
+    target_data = preprocess.make_dataset(tar_path, target_vocab)
     assert len(source_data) == len(target_data)
+
     test_data = [(s, t) for s, t in six.moves.zip(source_data, target_data)
                  if 0 < len(s) and 0 < len(t)]
 
@@ -227,12 +218,9 @@ def main():
     # optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
     optimizer = AIAYNAdamTrainer(dy_model)
 
-    # CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize // 4)()
-
     # Setup Trainer
     train_iter = chainer.iterators.SerialIterator(train_data, args.batchsize)
-    test_iter = chainer.iterators.SerialIterator(test_data, args.batchsize,
-                                                 repeat=False, shuffle=False)
+    test_iter = chainer.iterators.SerialIterator(test_data, args.batchsize, repeat=False, shuffle=False)
 
     iter_per_epoch = len(train_data) // args.batchsize
     print('Number of iter/epoch =', iter_per_epoch)
@@ -250,9 +238,9 @@ def main():
 
         print(
             'epoch:{:02f}/{:02d}\ttrain_loss:{:.04f}\tlr:{}'.format(train_iter.epoch_detail,
-                                                                         train_iter.epoch + 1,
-                                                                         loss.value(),
-                                                                         optimizer.optimizer.learning_rate))
+                                                                    train_iter.epoch + 1,
+                                                                    loss.value(),
+                                                                    optimizer.optimizer.learning_rate))
 
         # Check the validation accuracy of prediction after every epoch
         if train_iter.is_new_epoch:  # If this iteration is the final iteration of the current epoch
@@ -279,34 +267,7 @@ def main():
 
             CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize // 4)()
 
-    ############################################################
-
-
-    def translate_one(source, target):
-        words = preprocess.split_sentence(source)
-        print('# source : ' + ' '.join(words))
-        x = model.xp.array(
-            [source_ids.get(w, 1) for w in words], 'i')
-        ys = model.translate([x], beam=5)[0]
-        words = [target_words[y] for y in ys]
-        print('#  result : ' + ' '.join(words))
-        print('#  expect : ' + target)
-
-    @chainer.training.make_extension(trigger=(200, 'iteration'))
-    def translate(trainer):
-        translate_one(
-            'Who are we ?',
-            'Qui sommes-nous?')
-        translate_one(
-            'And it often costs over a hundred dollars ' +
-            'to obtain the required identity card .',
-            'Or, il en coûte souvent plus de cent dollars ' +
-            'pour obtenir la carte d\'identité requise.')
-
-        source, target = test_data[numpy.random.choice(len(test_data))]
-        source = ' '.join([source_words[i] for i in source])
-        target = ' '.join([target_words[i] for i in target])
-        translate_one(source, target)
+            ############################################################
 
 
 if __name__ == '__main__':

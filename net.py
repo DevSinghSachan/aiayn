@@ -356,10 +356,7 @@ class Transformer(object):
         self.encoder = Encoder(dy_model, n_layers, n_units, h, dropout)
         self.decoder = Decoder(dy_model, n_layers, n_units, h, dropout)
 
-        # TODO: Use position embedding
-        # if embed_position:
-        #     self.embed_pos = L.EmbedID(max_length, n_units,
-        #                                ignore_label=-1)
+        # TODO: Implement the feature of position embedding
 
         self.output_affine = Linear(dy_model, n_units, n_target_vocab)
         self.n_layers = n_layers
@@ -373,21 +370,6 @@ class Transformer(object):
 
     def initialize_position_encoding(self, length, n_units):
         xp = self.xp
-        """
-        # Implementation described in the paper
-        start = 1  # index starts from 1 or 0
-        posi_block = xp.arange(
-            start, length + start, dtype='f')[None, None, :]
-        unit_block = xp.arange(
-            start, n_units // 2 + start, dtype='f')[None, :, None]
-        rad_block = posi_block / 10000. ** (unit_block / (n_units // 2))
-        sin_block = xp.sin(rad_block)
-        cos_block = xp.cos(rad_block)
-        self.position_encoding_block = xp.empty((1, n_units, length), 'f')
-        self.position_encoding_block[:, ::2, :] = sin_block
-        self.position_encoding_block[:, 1::2, :] = cos_block
-        """
-
         # Implementation in the Google tensor2tensor repo
         channels = n_units
         position = xp.arange(length, dtype='f')
@@ -408,13 +390,9 @@ class Transformer(object):
     def make_input_embedding(self, embed, block):
         batch, length = block.shape
         emb_block = sentence_block_embed(embed, block) * self.scale_emb
-        # emb_block += self.xp.array(self.position_encoding_block[:, :, :length])
-        # if hasattr(self, 'embed_pos'):
-        #     emb_block += sentence_block_embed(
-        #         self.embed_pos,
-        #         self.xp.broadcast_to(
-        #             self.xp.arange(length).astype('i')[None, :], block.shape))
-        # # emb_block = F.dropout(emb_block, self.dropout)
+        emb_block += dy.inputTensor(self.position_encoding_block[0, :, :length])
+        # TODO: If position embedding, incorporate it here.
+        emb_block = dy.dropout(emb_block, self.dropout)
         return emb_block
 
     def make_attention_mask(self, source_block, target_block):
@@ -447,7 +425,7 @@ class Transformer(object):
         n_token = ignore_mask.sum()
         normalizer = n_token  # n_token or batch or 1
 
-        if True:
+        if not self.use_label_smoothing:
             bool_array = concat_t_block != -1
             indexes = np.argwhere(bool_array).ravel()
 
@@ -457,29 +435,24 @@ class Transformer(object):
             loss = dy.pickneglogsoftmax_batch(concat_logit_block, concat_t_block)
             loss = dy.mean_batches(loss)
 
-        # else:
-        #     log_prob = F.log_softmax(concat_logit_block)
-        #     broad_ignore_mask = self.xp.broadcast_to(
-        #         ignore_mask[:, None],
-        #         concat_logit_block.shape)
-        #     pre_loss = ignore_mask * \
-        #                log_prob[self.xp.arange(rebatch), concat_t_block]
-        #     loss = - F.sum(pre_loss) / normalizer
+        else:
+            bool_array = concat_t_block != -1
+            indexes = np.argwhere(bool_array).ravel()
 
-        # accuracy = F.accuracy(concat_logit_block, concat_t_block, ignore_label=-1)
+            concat_logit_block_ls = dy.pick_batch_elems(concat_logit_block, indexes)
+            concat_t_block_ls = concat_t_block[bool_array]
 
-        # perp = self.np.exp(loss.value() * normalizer / n_token)
-        #
-        # # Report the Values
-        # reporter.report({'loss': loss.value() * normalizer / n_token,
-        #                  #'acc': accuracy.data,
-        #                  'perp': perp}, self)
+            log_prob = dy.log_softmax(concat_logit_block_ls)
+            pre_loss = dy.pick_batch(log_prob, concat_t_block_ls)
+            loss = - dy.mean_batches(pre_loss)
 
-        # if self.use_label_smoothing:
-        #     label_smoothing = broad_ignore_mask * \
-        #                       - 1. / self.n_target_vocab * log_prob
-        #     label_smoothing = F.sum(label_smoothing) / normalizer
-        #     loss = 0.9 * loss + 0.1 * label_smoothing
+
+        # TODO: Can compute metrics like accuracy here
+
+        if self.use_label_smoothing:
+            label_smoothing = -1 * dy.mean_elems(log_prob)
+            label_smoothing = dy.mean_batches(label_smoothing)
+            loss = 0.9 * loss + 0.1 * label_smoothing
 
         return loss
 
@@ -514,8 +487,8 @@ class Transformer(object):
             return self.output_and_loss(h_block, y_out_block)
 
     def translate(self, x_block, max_length=50, beam=5):
-        if beam:
-            return self.translate_beam(x_block, max_length, beam)
+        # if beam:
+        #     return self.translate_beam(x_block, max_length, beam)
 
         # TODO: efficient inference by re-using result
         x_block = source_pad_concat_convert(x_block, device=None)
@@ -535,7 +508,6 @@ class Transformer(object):
             if self.xp.all(eos_flags):
                 break
 
-        # result = cuda.to_cpu(self.xp.stack(result).T)
         result = self.xp.stack(result).T
 
         # Remove EOS taggs
@@ -549,71 +521,72 @@ class Transformer(object):
             outs.append(y)
         return outs
 
-    def translate_beam(self, x_block, max_length=50, beam=5):
-        # TODO: efficient inference by re-using result
-        # TODO: batch processing
-        with chainer.no_backprop_mode():
-            with chainer.using_config('train', False):
-                x_block = source_pad_concat_convert(
-                    x_block, device=None)
-                batch, x_length = x_block.shape
-                assert batch == 1, 'Batch processing is not supported now.'
-                y_block = self.xp.full(
-                    (batch, 1), 2, dtype=x_block.dtype)  # bos
-                eos_flags = self.xp.zeros(
-                    (batch * beam,), dtype=x_block.dtype)
-                sum_scores = self.xp.zeros(1, 'f')
-                result = [[2]] * batch * beam
-                for i in range(max_length):
-                    log_prob_tail = self(x_block, y_block, y_block,
-                                         get_prediction=True)
 
-                    ys_list, ws_list = get_topk(
-                        log_prob_tail.data, beam, axis=1)
-                    ys_concat = self.xp.concatenate(ys_list, axis=0)
-                    sum_ws_list = [ws + sum_scores for ws in ws_list]
-                    sum_ws_concat = self.xp.concatenate(sum_ws_list, axis=0)
-
-                    # Get top-k from total candidates
-                    idx_list, sum_w_list = get_topk(
-                        sum_ws_concat, beam, axis=0)
-                    idx_concat = self.xp.stack(idx_list, axis=0)
-                    ys = ys_concat[idx_concat]
-                    sum_scores = self.xp.stack(sum_w_list, axis=0)
-
-                    if i != 0:
-                        old_idx_list = (idx_concat % beam).tolist()
-                    else:
-                        old_idx_list = [0] * beam
-
-                    result = [result[idx] + [y]
-                              for idx, y in zip(old_idx_list, ys.tolist())]
-
-                    y_block = self.xp.array(result).astype('i')
-                    if x_block.shape[0] != y_block.shape[0]:
-                        x_block = self.xp.broadcast_to(
-                            x_block, (y_block.shape[0], x_block.shape[1]))
-                    eos_flags += (ys == 0)
-                    if self.xp.all(eos_flags):
-                        break
-
-        outs = [[wi for wi in sent if wi not in [2, 0]] for sent in result]
-        outs = [sent if sent else [0] for sent in outs]
-        return outs
-
-
-def get_topk(x, k=5, axis=1):
-    ids_list = []
-    scores_list = []
-    xp = cuda.get_array_module(x)
-    for i in range(k):
-        ids = xp.argmax(x, axis=axis).astype('i')
-        if axis == 0:
-            scores = x[ids]
-            x[ids] = - float('inf')
-        else:
-            scores = x[xp.arange(ids.shape[0]), ids]
-            x[xp.arange(ids.shape[0]), ids] = - float('inf')
-        ids_list.append(ids)
-        scores_list.append(scores)
-    return ids_list, scores_list
+#     def translate_beam(self, x_block, max_length=50, beam=5):
+#         # TODO: efficient inference by re-using result
+#         # TODO: batch processing
+#         with chainer.no_backprop_mode():
+#             with chainer.using_config('train', False):
+#                 x_block = source_pad_concat_convert(
+#                     x_block, device=None)
+#                 batch, x_length = x_block.shape
+#                 assert batch == 1, 'Batch processing is not supported now.'
+#                 y_block = self.xp.full(
+#                     (batch, 1), 2, dtype=x_block.dtype)  # bos
+#                 eos_flags = self.xp.zeros(
+#                     (batch * beam,), dtype=x_block.dtype)
+#                 sum_scores = self.xp.zeros(1, 'f')
+#                 result = [[2]] * batch * beam
+#                 for i in range(max_length):
+#                     log_prob_tail = self(x_block, y_block, y_block,
+#                                          get_prediction=True)
+#
+#                     ys_list, ws_list = get_topk(
+#                         log_prob_tail.data, beam, axis=1)
+#                     ys_concat = self.xp.concatenate(ys_list, axis=0)
+#                     sum_ws_list = [ws + sum_scores for ws in ws_list]
+#                     sum_ws_concat = self.xp.concatenate(sum_ws_list, axis=0)
+#
+#                     # Get top-k from total candidates
+#                     idx_list, sum_w_list = get_topk(
+#                         sum_ws_concat, beam, axis=0)
+#                     idx_concat = self.xp.stack(idx_list, axis=0)
+#                     ys = ys_concat[idx_concat]
+#                     sum_scores = self.xp.stack(sum_w_list, axis=0)
+#
+#                     if i != 0:
+#                         old_idx_list = (idx_concat % beam).tolist()
+#                     else:
+#                         old_idx_list = [0] * beam
+#
+#                     result = [result[idx] + [y]
+#                               for idx, y in zip(old_idx_list, ys.tolist())]
+#
+#                     y_block = self.xp.array(result).astype('i')
+#                     if x_block.shape[0] != y_block.shape[0]:
+#                         x_block = self.xp.broadcast_to(
+#                             x_block, (y_block.shape[0], x_block.shape[1]))
+#                     eos_flags += (ys == 0)
+#                     if self.xp.all(eos_flags):
+#                         break
+#
+#         outs = [[wi for wi in sent if wi not in [2, 0]] for sent in result]
+#         outs = [sent if sent else [0] for sent in outs]
+#         return outs
+#
+#
+# def get_topk(x, k=5, axis=1):
+#     ids_list = []
+#     scores_list = []
+#     xp = cuda.get_array_module(x)
+#     for i in range(k):
+#         ids = xp.argmax(x, axis=axis).astype('i')
+#         if axis == 0:
+#             scores = x[ids]
+#             x[ids] = - float('inf')
+#         else:
+#             scores = x[xp.arange(ids.shape[0]), ids]
+#             x[xp.arange(ids.shape[0]), ids] = - float('inf')
+#         ids_list.append(ids)
+#         scores_list.append(scores)
+#     return ids_list, scores_list
