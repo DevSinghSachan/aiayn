@@ -403,11 +403,17 @@ class Transformer(object):
             bool_array = concat_t_block != -1
             indexes = np.argwhere(bool_array).ravel()
 
-            concat_logit_block = dy.pick_batch_elems(concat_logit_block, indexes)
-            concat_t_block = concat_t_block[bool_array]
+            # concat_logit_block = dy.pick_batch_elems(concat_logit_block, indexes)
+            # concat_t_block = concat_t_block[bool_array]
 
-            loss = dy.pickneglogsoftmax_batch(concat_logit_block, concat_t_block)
-            loss = dy.mean_batches(loss)
+            yy = np.copy(concat_t_block)
+            yy[concat_t_block < 0] = 0
+
+            # loss = dy.pickneglogsoftmax_batch(concat_logit_block, concat_t_block)
+            loss = dy.pickneglogsoftmax_batch(concat_logit_block, yy)
+            loss = dy.cmult(loss, dy.inputTensor(bool_array, batched=True))
+            # loss = dy.mean_batches(loss)
+            loss = (1./len(indexes)) * dy.sum_batches(loss)
 
         else:
             bool_array = concat_t_block != -1
