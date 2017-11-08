@@ -163,7 +163,7 @@ def main():
     parser.add_argument('--use-fixed-lr', action='store_true',
                         help='Use fixed learning rate rather than the ' +
                              'annealing proposed in the paper')
-    parser.add_argument('--dynet-devices', default=0)
+    parser.add_argument('--dynet-gpu', default=0)
     parser.add_argument('--dynet-autobatch', default=0)
     parser.add_argument('--dynet-mem', default=10000)
 
