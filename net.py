@@ -58,25 +58,6 @@ class LayerNorm(object):
         return ReverseTimeDistributed()(output, seq_len, batch_size)
 
 
-class PositionwiseFeedForward(object):
-    def __init__(self, size, hidden_size, model):
-        """
-    Args:
-        size(int): the size of input for the first-layer of the FFN.
-        hidden_size(int): the hidden layer size of the second-layer
-                          of the FNN.
-        droput(float): dropout probability(0-1.0).
-    """
-        self.w_1 = Linear(size, hidden_size, model)
-        self.w_2 = Linear(hidden_size, size, model)
-        self.layer_norm = LayerNorm(size, model)
-
-    def __call__(self, x, p):
-        residual = x
-        output = dy.dropout(self.w_2(dy.rectify(self.w_1(x))), p)
-        return self.layer_norm(output + residual)
-
-
 def sentence_block_embed(embed, x):
     """ Change implicitly embed_id function's target to ndim=2
 
@@ -90,9 +71,10 @@ def sentence_block_embed(embed, x):
     units, _ = embed.shape()
     Z = dy.zeros(units)
 
-    x[x < 0] = 0
+    y = np.copy(x)
+    y[x < 0] = 0
     # e = dy.concatenate_cols([Z if id_ == -1 else embed[id_] for id_ in x.reshape((batch * length,))])
-    e = dy.lookup_batch(embed, x.reshape((batch * length,)))
+    e = dy.lookup_batch(embed, y.reshape((batch * length,)))
     # assert (e.dim() == ((units, batch * length), 1))
     assert (e.dim() == ((units,), batch * length))
     e = dy.reshape(e, (units, length), batch_size=batch)
@@ -204,6 +186,7 @@ class MultiHeadAttention():
         else:
             batch_A = dy.transpose(dy.softmax(dy.transpose(batch_A)))
 
+        # TODO: Check whether this is correct after masking
         batch_A = dy.cmult(batch_A, mask)
         assert (batch_A.dim() == ((n_querys, n_keys), batch * h))
 
