@@ -127,8 +127,9 @@ def split_rows(X, h):
     steps = n_rows // h
     output = []
     for i in range(0, n_rows, steps):
-        indexes = l[i:i + steps]
-        output.append(dy.select_rows(X, indexes))
+        # indexes = l[i:i + steps]
+        # output.append(dy.select_rows(X, indexes))
+        output.append(dy.pickrange(X, i, i + steps))
     return output
 
 
@@ -223,7 +224,6 @@ class FeedForwardLayer():
 
         # TODO: Put Leaky Relu here
         self.act = dy.rectify
-        # self.act = F.leaky_relu
 
     def __call__(self, e):
         e = self.W_1(e)
@@ -333,16 +333,10 @@ class Transformer(object):
         channels = n_units
         position = xp.arange(length, dtype='f')
         num_timescales = channels // 2
-        log_timescale_increment = (
-            xp.log(10000. / 1.) /
-            (float(num_timescales) - 1))
-        inv_timescales = 1. * xp.exp(
-            xp.arange(num_timescales).astype('f') * -log_timescale_increment)
-        scaled_time = \
-            xp.expand_dims(position, 1) * \
-            xp.expand_dims(inv_timescales, 0)
-        signal = xp.concatenate(
-            [xp.sin(scaled_time), xp.cos(scaled_time)], axis=1)
+        log_timescale_increment = (xp.log(10000. / 1.) / (float(num_timescales) - 1))
+        inv_timescales = 1. * xp.exp(xp.arange(num_timescales).astype('f') * -log_timescale_increment)
+        scaled_time = xp.expand_dims(position, 1) * xp.expand_dims(inv_timescales, 0)
+        signal = xp.concatenate([xp.sin(scaled_time), xp.cos(scaled_time)], axis=1)
         signal = xp.reshape(signal, [1, length, channels])
         self.position_encoding_block = xp.transpose(signal, (0, 2, 1))
 
@@ -404,7 +398,6 @@ class Transformer(object):
             log_prob = dy.log_softmax(concat_logit_block_ls)
             pre_loss = dy.pick_batch(log_prob, concat_t_block_ls)
             loss = - dy.mean_batches(pre_loss)
-
 
         # TODO: Can compute metrics like accuracy here
 
