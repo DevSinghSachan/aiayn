@@ -93,9 +93,9 @@ def sentence_block_embed(embed, x):
     """
 
     batch, length = x.shape
-    units, _ = embed.shape()
-    # _, units = embed.shape()  # According to updated Dynet
-    Z = dy.zeros(units)
+    #units, _ = embed.shape()
+    _, units = embed.shape()  # According to updated Dynet
+    # Z = dy.zeros(units)
 
     y = np.copy(x)
     y[x < 0] = 0
