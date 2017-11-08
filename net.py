@@ -93,8 +93,8 @@ def sentence_block_embed(embed, x):
     """
 
     batch, length = x.shape
-    # units, _ = embed.shape()
-    _, units = embed.shape()  # According to updated Dynet
+    units, _ = embed.shape()
+    # _, units = embed.shape()  # According to updated Dynet
     Z = dy.zeros(units)
 
     y = np.copy(x)
@@ -162,19 +162,19 @@ class MultiHeadAttention():
 
     def __init__(self, dy_model, n_units, h=8, dropout=0.1, self_attention=True):
         # TODO: keep bias = False
-        # self.W_Q = Linear(dy_model, n_units, n_units)
-        # self.W_K = Linear(dy_model, n_units, n_units)
-        # self.W_V = Linear(dy_model, n_units, n_units)
+        self.W_Q = Linear(dy_model, n_units, n_units)
+        self.W_K = Linear(dy_model, n_units, n_units)
+        self.W_V = Linear(dy_model, n_units, n_units)
+
+        self.finishing_linear_layer = Linear(dy_model, n_units, n_units)
+
+        # if self_attention:
+        #     self.W_QKV = ConvolutionSentence(dy_model, n_units, n_units * 3, nobias=True)
+        # else:
+        #     self.W_Q = ConvolutionSentence(dy_model, n_units, n_units, nobias=True)
+        #     self.W_KV = ConvolutionSentence(dy_model, n_units, n_units * 2, nobias=True)
         #
-        # self.finishing_linear_layer = Linear(dy_model, n_units, n_units)
-
-        if self_attention:
-            self.W_QKV = ConvolutionSentence(dy_model, n_units, n_units * 3, nobias=True)
-        else:
-            self.W_Q = ConvolutionSentence(dy_model, n_units, n_units, nobias=True)
-            self.W_KV = ConvolutionSentence(dy_model, n_units, n_units * 2, nobias=True)
-
-        self.finishing_linear_layer = ConvolutionSentence(dy_model, n_units, n_units, nobias=True)
+        # self.finishing_linear_layer = ConvolutionSentence(dy_model, n_units, n_units, nobias=True)
 
         self.h = h
         self.scale_score = 1. / (n_units // h) ** 0.5
@@ -185,16 +185,16 @@ class MultiHeadAttention():
         h = self.h
 
         if self.is_self_attention:
-            Q, K, V = split_rows(self.W_QKV(x), 3)
-            # Q = self.W_Q(x)
-            # K = self.W_K(x)
-            # V = self.W_V(x)
-        else:
+            # Q, K, V = split_rows(self.W_QKV(x), 3)
             Q = self.W_Q(x)
-            K, V = split_rows(self.W_KV(z), 2)
+            K = self.W_K(x)
+            V = self.W_V(x)
+        else:
             # Q = self.W_Q(x)
-            # K = self.W_K(z)
-            # V = self.W_V(z)
+            # K, V = split_rows(self.W_KV(z), 2)
+            Q = self.W_Q(x)
+            K = self.W_K(z)
+            V = self.W_V(z)
 
         (n_units, n_querys), batch = Q.dim()
         (_, n_keys), _ = K.dim()
