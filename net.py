@@ -35,7 +35,7 @@ class ConvolutionSentence(object):
                  ksize=1, stride=1, pad=0, nobias=False):
 
         # self.W = dy_model.add_parameters(dim=(in_channels, ksize, stride, out_channels))
-        self.W = dy_model.add_parameters(dim=(stride, ksize, in_channels, out_channels))
+        self.W = dy_model.add_parameters(dim=(stride, in_channels, 1, out_channels))
         # if not nobias:
         #     self.b = dy_model.add_parameters(out_channels)
 
