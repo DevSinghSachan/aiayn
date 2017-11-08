@@ -22,6 +22,30 @@ class ReverseTimeDistributed(object):
         return dy.reshape(input, (model_dim, seq_len), batch_size=batch_size)
 
 
+class ConvolutionSentence(object):
+    """ Position-wise Linear Layer for Sentence Block
+
+    Position-wise linear layer for array of shape
+    (batchsize, dimension, sentence_length)
+    can be implemented a convolution layer.
+
+    """
+
+    def __init__(self, dy_model, in_channels, out_channels,
+                 ksize=1, stride=1, pad=0, nobias=False):
+
+        self.W = dy_model.add_parameters((in_channels, ksize, stride, out_channels))
+        # if not nobias:
+        #     self.b = dy_model.add_parameters(out_channels)
+
+    def __call__(self, x):
+        """Applies the linear layer."""
+        W = dy.parameter(self.W)
+        temp = dy.conv2d(x, W, [1, 1])
+        y = dy.transpose(temp[0])
+        return y
+
+
 class Linear(object):
     def __init__(self, dy_model, input_dim, output_dim):
         self.W1 = dy_model.add_parameters((output_dim, input_dim))
@@ -136,11 +160,20 @@ class MultiHeadAttention():
 
     def __init__(self, dy_model, n_units, h=8, dropout=0.1, self_attention=True):
         # TODO: keep bias = False
-        self.W_Q = Linear(dy_model, n_units, n_units)
-        self.W_K = Linear(dy_model, n_units, n_units)
-        self.W_V = Linear(dy_model, n_units, n_units)
+        # self.W_Q = Linear(dy_model, n_units, n_units)
+        # self.W_K = Linear(dy_model, n_units, n_units)
+        # self.W_V = Linear(dy_model, n_units, n_units)
+        #
+        # self.finishing_linear_layer = Linear(dy_model, n_units, n_units)
 
-        self.finishing_linear_layer = Linear(dy_model, n_units, n_units)
+        if self_attention:
+            self.W_QKV = ConvolutionSentence(dy_model, n_units, n_units * 3, nobias=True)
+        else:
+            self.W_Q = ConvolutionSentence(dy_model, n_units, n_units, nobias=True)
+            self.W_KV = ConvolutionSentence(dy_model, n_units, n_units * 2, nobias=True)
+
+        self.finishing_linear_layer = ConvolutionSentence(dy_model, n_units, n_units, nobias=True)
+
         self.h = h
         self.scale_score = 1. / (n_units // h) ** 0.5
         self.dropout = dropout
@@ -150,13 +183,16 @@ class MultiHeadAttention():
         h = self.h
 
         if self.is_self_attention:
-            Q = self.W_Q(x)
-            K = self.W_K(x)
-            V = self.W_V(x)
+            Q, K, V = split_rows(self.W_QKV(x), 3)
+            # Q = self.W_Q(x)
+            # K = self.W_K(x)
+            # V = self.W_V(x)
         else:
             Q = self.W_Q(x)
-            K = self.W_K(z)
-            V = self.W_V(z)
+            K, V = split_rows(self.W_KV(z), 2)
+            # Q = self.W_Q(x)
+            # K = self.W_K(z)
+            # V = self.W_V(z)
 
         (n_units, n_querys), batch = Q.dim()
         (_, n_keys), _ = K.dim()
