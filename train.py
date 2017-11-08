@@ -71,7 +71,7 @@ def seq2seq_pad_concat_convert(xy_batch, device, eos_id=0, bos_id=2):
 
     y_in_block = xp.pad(y_block, ((0, 0), (1, 0)),
                         'constant', constant_values=bos_id)
-    return (x_block, y_in_block, y_out_block)
+    return x_block, y_in_block, y_out_block
 
 
 def source_pad_concat_convert(x_seqs, device, eos_id=0, bos_id=2):
@@ -134,7 +134,7 @@ def main():
                         help='Number of heads in attention mechanism')
     parser.add_argument('--dropout', '-d', type=float, default=0.2,
                         help='Dropout rate')
-    parser.add_argument('--input', '-i', type=str, default='./',
+    parser.add_argument('--input', '-i', type=str, default='data',
                         help='Input directory')
     parser.add_argument('--source', '-s', type=str,
                         default='train.ja',

@@ -2,20 +2,11 @@
 
 import numpy as np
 import dynet as dy
-
-import chainer
-# from chainer import cuda
 import chainer.functions as F
-import chainer.links as L
-from chainer import reporter
-
 from train import source_pad_concat_convert
 
-# linear_init = chainer.initializers.GlorotNormal()
-linear_init = chainer.initializers.LeCunUniform()
-
-
 MIN_VALUE = -10000
+
 
 class TimeDistributed(object):
     def __call__(self, input):
@@ -99,8 +90,11 @@ def sentence_block_embed(embed, x):
     units, _ = embed.shape()
     Z = dy.zeros(units)
 
-    e = dy.concatenate_cols([Z if id_ == -1 else embed[id_] for id_ in x.reshape((batch * length,))])
-    assert (e.dim() == ((units, batch * length), 1))
+    x[x < 0] = 0
+    # e = dy.concatenate_cols([Z if id_ == -1 else embed[id_] for id_ in x.reshape((batch * length,))])
+    e = dy.lookup_batch(embed, x.reshape((batch * length,)))
+    # assert (e.dim() == ((units, batch * length), 1))
+    assert (e.dim() == ((units,), batch * length))
     e = dy.reshape(e, (units, length), batch_size=batch)
 
     assert (e.dim() == ((units, length), batch))
@@ -125,41 +119,6 @@ def seq_func(func, x, reconstruct_shape=True):
     e = F.transpose(e.reshape((batch, length, out_units)), (0, 2, 1))
     assert (e.shape == (batch, out_units, length))
     return e
-
-
-class ConvolutionSentence(L.Convolution2D):
-    """ Position-wise Linear Layer for Sentence Block
-
-    Position-wise linear layer for array of shape
-    (batchsize, dimension, sentence_length)
-    can be implemented a convolution layer.
-
-    """
-
-    def __init__(self, in_channels, out_channels,
-                 ksize=1, stride=1, pad=0, nobias=False,
-                 initialW=None, initial_bias=None):
-        super(ConvolutionSentence, self).__init__(
-            in_channels, out_channels,
-            ksize, stride, pad, nobias,
-            initialW, initial_bias)
-
-    def __call__(self, x):
-        """Applies the linear layer.
-
-        Args:
-            x (~chainer.Variable): Batch of input vector block. Its shape is
-                (batchsize, in_channels, sentence_length).
-
-        Returns:
-            ~chainer.Variable: Output of the linear layer. Its shape is
-                (batchsize, out_channels, sentence_length).
-
-        """
-        x = F.expand_dims(x, axis=3)
-        y = super(ConvolutionSentence, self).__call__(x)
-        y = F.squeeze(y, axis=3)
-        return y
 
 
 def split_rows(X, h):
