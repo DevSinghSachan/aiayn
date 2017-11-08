@@ -164,6 +164,8 @@ def main():
                         help='Use fixed learning rate rather than the ' +
                              'annealing proposed in the paper')
     parser.add_argument('--dynet-devices', default=0)
+    parser.add_argument('--dynet-autobatch', default=0)
+    parser.add_argument('--dynet-mem', default=10000)
 
     args = parser.parse_args()
     print(json.dumps(args.__dict__, indent=4))
