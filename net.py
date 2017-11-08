@@ -42,7 +42,7 @@ class ConvolutionSentence(object):
     def __call__(self, x):
         """Applies the linear layer."""
         W = dy.parameter(self.W)
-        temp = dy.conv2d(x, W, stride=[1, 1], is_valid=True)
+        temp = dy.conv2d(dy.transpose(x), W, stride=[1, 1], is_valid=True)
         y = dy.transpose(temp[0])
         return y
 
