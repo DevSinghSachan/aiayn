@@ -165,6 +165,7 @@ def main():
                              'annealing proposed in the paper')
 
     parser.add_argument('--dynet-gpus', default=0)
+    parser.add_argument('--dynet-devices', default=0)
     parser.add_argument('--dynet-gpu', default=0)
     parser.add_argument('--dynet-autobatch', default=0)
     parser.add_argument('--dynet-mem', default=10000)
