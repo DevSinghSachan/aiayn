@@ -68,6 +68,19 @@ class Linear(object):
         return ReverseTimeDistributed()(output, seq_len, batch_size)
 
 
+class Linear_nobias(object):
+    def __init__(self, dy_model, input_dim, output_dim):
+        self.W1 = dy_model.add_parameters((output_dim, input_dim))
+        # self.b1 = dy.zeros(output_dim)
+        self.b1 = dy_model.add_parameters(output_dim)
+
+    def __call__(self, input_expr):
+        W1 = dy.parameter(self.W1)
+        b1 = dy.parameter(self.b1)
+        output = dy.affine_transform([b1, W1, input_expr])
+        return output
+
+
 class LayerNorm(object):
     def __init__(self, dy_model, d_hid):
         self.p_g = dy_model.add_parameters(dim=d_hid, init=dy.ConstInitializer(1.0))
@@ -93,8 +106,8 @@ def sentence_block_embed(embed, x):
     """
 
     batch, length = x.shape
-    #units, _ = embed.shape()
-    _, units = embed.shape()  # According to updated Dynet
+    units, _ = embed.shape()
+    # _, units = embed.shape()  # According to updated Dynet
     # Z = dy.zeros(units)
 
     y = np.copy(x)
@@ -162,9 +175,13 @@ class MultiHeadAttention():
 
     def __init__(self, dy_model, n_units, h=8, dropout=0.1, self_attention=True):
         # TODO: keep bias = False
-        self.W_Q = Linear(dy_model, n_units, n_units)
-        self.W_K = Linear(dy_model, n_units, n_units)
-        self.W_V = Linear(dy_model, n_units, n_units)
+        # self.W_Q = Linear(dy_model, n_units, n_units)
+        # self.W_K = Linear(dy_model, n_units, n_units)
+        # self.W_V = Linear(dy_model, n_units, n_units)
+
+        self.W_Q = Linear_nobias(dy_model, n_units, n_units)
+        self.W_K = Linear_nobias(dy_model, n_units, n_units)
+        self.W_V = Linear_nobias(dy_model, n_units, n_units)
 
         self.finishing_linear_layer = Linear(dy_model, n_units, n_units)
 
