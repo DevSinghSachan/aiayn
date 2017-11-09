@@ -22,29 +22,29 @@ class ReverseTimeDistributed(object):
         return dy.reshape(input, (model_dim, seq_len), batch_size=batch_size)
 
 
-class ConvolutionSentence(object):
-    """ Position-wise Linear Layer for Sentence Block
-
-    Position-wise linear layer for array of shape
-    (batchsize, dimension, sentence_length)
-    can be implemented a convolution layer.
-
-    """
-
-    def __init__(self, dy_model, in_channels, out_channels,
-                 ksize=1, stride=1, pad=0, nobias=False):
-
-        self.W = dy_model.add_parameters(dim=(in_channels, ksize, stride, out_channels))
-        # self.W = dy_model.add_parameters(dim=(stride, 1, in_channels, out_channels))
-        # if not nobias:
-        #     self.b = dy_model.add_parameters(out_channels)
-
-    def __call__(self, x):
-        """Applies the linear layer."""
-        W = dy.parameter(self.W)
-        temp = dy.conv2d(x, W, stride=[1, 1], is_valid=True)
-        y = dy.transpose(temp[0])
-        return y
+# class ConvolutionSentence(object):
+#     """ Position-wise Linear Layer for Sentence Block
+#
+#     Position-wise linear layer for array of shape
+#     (batchsize, dimension, sentence_length)
+#     can be implemented a convolution layer.
+#
+#     """
+#
+#     def __init__(self, dy_model, in_channels, out_channels,
+#                  ksize=1, stride=1, pad=0, nobias=False):
+#
+#         self.W = dy_model.add_parameters(dim=(in_channels, ksize, stride, out_channels))
+#         # self.W = dy_model.add_parameters(dim=(stride, 1, in_channels, out_channels))
+#         # if not nobias:
+#         #     self.b = dy_model.add_parameters(out_channels)
+#
+#     def __call__(self, x):
+#         """Applies the linear layer."""
+#         W = dy.parameter(self.W)
+#         temp = dy.conv2d(x, W, stride=[1, 1], is_valid=True)
+#         y = dy.transpose(temp[0])
+#         return y
 
 
 class Linear(object):
@@ -179,19 +179,13 @@ class MultiHeadAttention():
         # self.W_K = Linear(dy_model, n_units, n_units)
         # self.W_V = Linear(dy_model, n_units, n_units)
 
-        self.W_Q = Linear_nobias(dy_model, n_units, n_units)
-        self.W_K = Linear_nobias(dy_model, n_units, n_units)
-        self.W_V = Linear_nobias(dy_model, n_units, n_units)
+        if self_attention:
+            self.W_QKV = Linear_nobias(dy_model, n_units, n_units * 3)
+        else:
+            self.W_Q = Linear_nobias(dy_model, n_units, n_units)
+            self.W_KV = Linear_nobias(dy_model, n_units, n_units * 2)
 
-        self.finishing_linear_layer = Linear(dy_model, n_units, n_units)
-
-        # if self_attention:
-        #     self.W_QKV = ConvolutionSentence(dy_model, n_units, n_units * 3, nobias=True)
-        # else:
-        #     self.W_Q = ConvolutionSentence(dy_model, n_units, n_units, nobias=True)
-        #     self.W_KV = ConvolutionSentence(dy_model, n_units, n_units * 2, nobias=True)
-        #
-        # self.finishing_linear_layer = ConvolutionSentence(dy_model, n_units, n_units, nobias=True)
+        self.finishing_linear_layer = Linear_nobias(dy_model, n_units, n_units)
 
         self.h = h
         self.scale_score = 1. / (n_units // h) ** 0.5
@@ -202,16 +196,16 @@ class MultiHeadAttention():
         h = self.h
 
         if self.is_self_attention:
-            # Q, K, V = split_rows(self.W_QKV(x), 3)
-            Q = self.W_Q(x)
-            K = self.W_K(x)
-            V = self.W_V(x)
-        else:
+            Q, K, V = split_rows(self.W_QKV(x), 3)
             # Q = self.W_Q(x)
-            # K, V = split_rows(self.W_KV(z), 2)
+            # K = self.W_K(x)
+            # V = self.W_V(x)
+        else:
             Q = self.W_Q(x)
-            K = self.W_K(z)
-            V = self.W_V(z)
+            K, V = split_rows(self.W_KV(z), 2)
+            # Q = self.W_Q(x)
+            # K = self.W_K(z)
+            # V = self.W_V(z)
 
         (n_units, n_querys), batch = Q.dim()
         (_, n_keys), _ = K.dim()
@@ -257,8 +251,8 @@ class MultiHeadAttention():
 class FeedForwardLayer():
     def __init__(self, dy_model, n_units):
         n_inner_units = n_units * 4
-        self.W_1 = Linear(dy_model, n_units, n_inner_units)
-        self.W_2 = Linear(dy_model, n_inner_units, n_units)
+        self.W_1 = Linear_nobias(dy_model, n_units, n_inner_units)
+        self.W_2 = Linear_nobias(dy_model, n_inner_units, n_units)
 
         # TODO: Put Leaky Relu here
         self.act = dy.rectify
