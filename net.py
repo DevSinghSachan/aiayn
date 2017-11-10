@@ -22,31 +22,6 @@ class ReverseTimeDistributed(object):
         return dy.reshape(input, (model_dim, seq_len), batch_size=batch_size)
 
 
-# class ConvolutionSentence(object):
-#     """ Position-wise Linear Layer for Sentence Block
-#
-#     Position-wise linear layer for array of shape
-#     (batchsize, dimension, sentence_length)
-#     can be implemented a convolution layer.
-#
-#     """
-#
-#     def __init__(self, dy_model, in_channels, out_channels,
-#                  ksize=1, stride=1, pad=0, nobias=False):
-#
-#         self.W = dy_model.add_parameters(dim=(in_channels, ksize, stride, out_channels))
-#         # self.W = dy_model.add_parameters(dim=(stride, 1, in_channels, out_channels))
-#         # if not nobias:
-#         #     self.b = dy_model.add_parameters(out_channels)
-#
-#     def __call__(self, x):
-#         """Applies the linear layer."""
-#         W = dy.parameter(self.W)
-#         temp = dy.conv2d(x, W, stride=[1, 1], is_valid=True)
-#         y = dy.transpose(temp[0])
-#         return y
-
-
 class Linear(object):
     def __init__(self, dy_model, input_dim, output_dim):
         self.W1 = dy_model.add_parameters((output_dim, input_dim))
@@ -60,6 +35,7 @@ class Linear(object):
             input = TimeDistributed()(input_expr)
         else:
             input = input_expr
+
         output = dy.affine_transform([b1, W1, input])
 
         if not reconstruct_shape:
@@ -71,12 +47,13 @@ class Linear(object):
 class Linear_nobias(object):
     def __init__(self, dy_model, input_dim, output_dim):
         self.W1 = dy_model.add_parameters((output_dim, input_dim))
-        # self.b1 = dy.zeros(output_dim)
+        self.output_dim = output_dim
         self.b1 = dy_model.add_parameters(output_dim)
 
     def __call__(self, input_expr):
         W1 = dy.parameter(self.W1)
-        b1 = dy.parameter(self.b1)
+        # b1 = dy.parameter(self.b1)
+        b1 = dy.zeros(self.output_dim)
         output = dy.affine_transform([b1, W1, input_expr])
         return output
 
@@ -185,7 +162,7 @@ class MultiHeadAttention():
             self.W_Q = Linear_nobias(dy_model, n_units, n_units)
             self.W_KV = Linear_nobias(dy_model, n_units, n_units * 2)
 
-        self.finishing_linear_layer = Linear_nobias(dy_model, n_units, n_units)
+        self.finishing_linear_layer = Linear(dy_model, n_units, n_units)
 
         self.h = h
         self.scale_score = 1. / (n_units // h) ** 0.5
@@ -244,23 +221,23 @@ class MultiHeadAttention():
 
         C = dy.concatenate(split_batch(batch_C, h), d=0)
         assert (C.dim() == ((n_units, n_querys), batch))
-        C = self.finishing_linear_layer(C)
+        C = self.finishing_linear_layer(C, reconstruct_shape=False, timedistributed=True)
         return C
 
 
 class FeedForwardLayer():
     def __init__(self, dy_model, n_units):
         n_inner_units = n_units * 4
-        self.W_1 = Linear_nobias(dy_model, n_units, n_inner_units)
-        self.W_2 = Linear_nobias(dy_model, n_inner_units, n_units)
+        self.W_1 = Linear(dy_model, n_units, n_inner_units)
+        self.W_2 = Linear(dy_model, n_inner_units, n_units)
 
         # TODO: Put Leaky Relu here
         self.act = dy.rectify
 
     def __call__(self, e):
-        e = self.W_1(e)
+        e = self.W_1(e, reconstruct_shape=False, timedistributed=True)
         e = self.act(e)
-        e = self.W_2(e)
+        e = self.W_2(e, reconstruct_shape=False, timedistributed=True)
         return e
 
 
