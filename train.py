@@ -246,11 +246,12 @@ def main():
         optimizer.update()
 
         if num_steps % 200 == 0:
-            print("epoch:{:02f}/{:02d}\ttrain_loss:{:.04f}\tlr:{}\t{} sec".format(train_iter.epoch_detail,
-                                                                                  train_iter.epoch + 1,
-                                                                                  loss.value(),
-                                                                                  optimizer.optimizer.learning_rate,
-                                                                                  time() - time_s))
+            print("epoch:{:02f}/{:02d}\tsteps: {}\ttrain_loss:{:.04f}\tlr:{}\t{} sec".format(train_iter.epoch_detail,
+                                                                                             num_steps,
+                                                                                             train_iter.epoch + 1,
+                                                                                             loss.value(),
+                                                                                             optimizer.optimizer.learning_rate,
+                                                                                             time() - time_s))
 
         # Check the validation accuracy of prediction after every epoch
         if train_iter.is_new_epoch:  # If this iteration is the final iteration of the current epoch
