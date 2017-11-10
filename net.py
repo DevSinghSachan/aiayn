@@ -54,7 +54,13 @@ class Linear_nobias(object):
         W1 = dy.parameter(self.W1)
         # b1 = dy.parameter(self.b1)
         b1 = dy.zeros(self.output_dim)
+        (_, seq_len), batch_size = input_expr.dim()
+
         output = dy.affine_transform([b1, W1, input_expr])
+
+        if seq_len == 1: # This is helpful when sequence length is 1 especially during decoding
+            output = ReverseTimeDistributed()(output, seq_len, batch_size)
+
         return output
 
 
@@ -393,20 +399,11 @@ class Transformer(object):
         if not self.use_label_smoothing:
             bool_array = concat_t_block != -1
             indexes = np.argwhere(bool_array).ravel()
-
             concat_logit_block = dy.pick_batch_elems(concat_logit_block, indexes)
             concat_t_block = concat_t_block[bool_array]
 
-            # yy = np.copy(concat_t_block)
-            # yy[concat_t_block < 0] = 0
-
             loss = dy.pickneglogsoftmax_batch(concat_logit_block, concat_t_block)
             loss = dy.mean_batches(loss)
-
-            # loss = dy.pickneglogsoftmax_batch(concat_logit_block, yy)
-            # loss = dy.cmult(loss, dy.inputTensor(bool_array, batched=True))
-            # loss = (1./len(indexes)) * dy.sum_batches(loss)
-
         else:
             bool_array = concat_t_block != -1
             indexes = np.argwhere(bool_array).ravel()
@@ -470,8 +467,7 @@ class Transformer(object):
         result = []
         for i in range(max_length):
             # print(i)
-            log_prob_tail = self(x_block, y_block, y_block,
-                                 get_prediction=True)
+            log_prob_tail = self(x_block, y_block, y_block, get_prediction=True)
             ys = self.xp.argmax(log_prob_tail.npvalue(), axis=0).astype('i')
             result.append(ys)
             y_block = F.concat([y_block, ys[:, None]], axis=1).data
