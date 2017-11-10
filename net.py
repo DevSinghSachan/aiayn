@@ -151,7 +151,7 @@ class MultiHeadAttention():
             self.W_Q = Linear_nobias(dy_model, n_units, n_units)
             self.W_KV = Linear_nobias(dy_model, n_units, n_units * 2)
 
-        self.finishing_linear_layer = Linear(dy_model, n_units, n_units)
+        self.finishing_linear_layer = Linear_nobias(dy_model, n_units, n_units)
 
         self.h = h
         self.scale_score = 1. / (n_units // h) ** 0.5
@@ -250,7 +250,6 @@ class EncoderLayer():
     def __call__(self, e, xx_mask):
         self.self_attention.set_dropout(self.dropout)
         sub = self.self_attention(e, e, xx_mask)
-
         e = e + dy.dropout(sub, self.dropout)
         e = self.ln_1(e)
 
