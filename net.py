@@ -108,26 +108,6 @@ def sentence_block_embed(embed, x):
     return e
 
 
-def seq_func(func, x, reconstruct_shape=True):
-    """ Change implicitly function's target to ndim=3
-
-    Apply a given function for array of ndim 3,
-    shape (batchsize, dimension, sentence_length),
-    instead for array of ndim 2.
-
-    """
-
-    batch, units, length = x.shape
-    e = F.transpose(x, (0, 2, 1)).reshape(batch * length, units)
-    e = func(e)
-    if not reconstruct_shape:
-        return e
-    out_units = e.shape[1]
-    e = F.transpose(e.reshape((batch, length, out_units)), (0, 2, 1))
-    assert (e.shape == (batch, out_units, length))
-    return e
-
-
 def split_rows(X, h):
     (n_rows, _), batch = X.dim()
     l = range(n_rows)
