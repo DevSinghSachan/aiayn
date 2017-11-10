@@ -253,6 +253,9 @@ def main():
                                                                                              optimizer.optimizer.learning_rate,
                                                                                              time() - time_s))
 
+        if num_steps % 800 == 0:
+            CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize // 4)()
+            
         # Check the validation accuracy of prediction after every epoch
         if train_iter.is_new_epoch:  # If this iteration is the final iteration of the current epoch
             test_losses = []

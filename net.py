@@ -433,6 +433,7 @@ class Transformer(object):
 
     def __call__(self, x_block, y_in_block, y_out_block, get_prediction=False):
         dy.renew_cg()
+        # print(self.dropout)
         batch, x_length = x_block.shape
         batch, y_length = y_in_block.shape
 
@@ -476,6 +477,7 @@ class Transformer(object):
         result = []
         for i in range(max_length):
             # print(i)
+            self.set_dropout(0.0)
             log_prob_tail = self(x_block, y_block, y_block, get_prediction=True)
             ys = self.xp.argmax(log_prob_tail.npvalue(), axis=0).astype('i')
             result.append(ys)
