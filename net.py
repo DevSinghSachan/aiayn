@@ -218,7 +218,7 @@ class MultiHeadAttention():
 
         C = dy.concatenate(split_batch(batch_C, h), d=0)
         assert (C.dim() == ((n_units, n_querys), batch))
-        C = self.finishing_linear_layer(C, reconstruct_shape=False, timedistributed=True)
+        C = self.finishing_linear_layer(C)
         return C
 
 
