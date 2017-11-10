@@ -139,7 +139,7 @@ class MultiHeadAttention():
 
     """
 
-    def __init__(self, dy_model, n_units, h=8, dropout=0.1, self_attention=True):
+    def __init__(self, dy_model, n_units, h=8, self_attention=True):
         # TODO: keep bias = False
         # self.W_Q = Linear(dy_model, n_units, n_units)
         # self.W_K = Linear(dy_model, n_units, n_units)
@@ -155,8 +155,11 @@ class MultiHeadAttention():
 
         self.h = h
         self.scale_score = 1. / (n_units // h) ** 0.5
-        self.dropout = dropout
+        # self.dropout = dropout
         self.is_self_attention = self_attention
+
+    def set_dropout(self, dropout):
+        self.dropout = dropout
 
     def __call__(self, x, z=None, mask=None):
         h = self.h
@@ -235,38 +238,48 @@ class FeedForwardLayer():
 
 
 class EncoderLayer():
-    def __init__(self, dy_model, n_units, h=8, dropout=0.1):
+    def __init__(self, dy_model, n_units, h=8):
         self.self_attention = MultiHeadAttention(dy_model, n_units, h)
         self.feed_forward = FeedForwardLayer(dy_model, n_units)
         self.ln_1 = LayerNorm(dy_model, n_units)
         self.ln_2 = LayerNorm(dy_model, n_units)
+
+    def set_dropout(self, dropout):
         self.dropout = dropout
 
     def __call__(self, e, xx_mask):
+        self.self_attention.set_dropout(self.dropout)
         sub = self.self_attention(e, e, xx_mask)
+
         e = e + dy.dropout(sub, self.dropout)
         e = self.ln_1(e)
+
         sub = self.feed_forward(e)
         e = e + dy.dropout(sub, self.dropout)
         e = self.ln_2(e)
+
         return e
 
 
 class DecoderLayer():
-    def __init__(self, dy_model, n_units, h=8, dropout=0.1):
+    def __init__(self, dy_model, n_units, h=8):
         self.self_attention = MultiHeadAttention(dy_model, n_units, h)
         self.source_attention = MultiHeadAttention(dy_model, n_units, h, self_attention=False)
         self.feed_forward = FeedForwardLayer(dy_model, n_units)
         self.ln_1 = LayerNorm(dy_model, n_units)
         self.ln_2 = LayerNorm(dy_model, n_units)
         self.ln_3 = LayerNorm(dy_model, n_units)
+
+    def set_dropout(self, dropout):
         self.dropout = dropout
 
     def __call__(self, e, s, xy_mask, yy_mask):
+        self.self_attention.set_dropout(self.dropout)
         sub = self.self_attention(e, e, yy_mask)
         e = e + dy.dropout(sub, self.dropout)
         e = self.ln_1(e)
 
+        self.source_attention.set_dropout(self.dropout)
         sub = self.source_attention(e, s, xy_mask)
         e = e + dy.dropout(sub, self.dropout)
         e = self.ln_2(e)
@@ -278,44 +291,52 @@ class DecoderLayer():
 
 
 class Encoder():
-    def __init__(self, dy_model, n_layers, n_units, h=8, dropout=0.1):
+    def __init__(self, dy_model, n_layers, n_units, h=8):
         self.layer_names = []
         for i in range(1, n_layers + 1):
             name = 'l{}'.format(i)
-            layer = EncoderLayer(dy_model, n_units, h, dropout)
+            layer = EncoderLayer(dy_model, n_units, h)
             self.layer_names.append((name, layer))
+
+    def set_dropout(self, dropout):
+        self.dropout = dropout
 
     def __call__(self, e, xx_mask):
         for name, layer in self.layer_names:
+            layer.set_dropout(self.dropout)
             e = layer(e, xx_mask)
         return e
 
 
 class Decoder():
-    def __init__(self, dy_model, n_layers, n_units, h=8, dropout=0.1):
+    def __init__(self, dy_model, n_layers, n_units, h=8):
         self.layer_names = []
         for i in range(1, n_layers + 1):
             name = 'l{}'.format(i)
-            layer = DecoderLayer(dy_model, n_units, h, dropout)
+            layer = DecoderLayer(dy_model, n_units, h)
             self.layer_names.append((name, layer))
+
+    def set_dropout(self, dropout):
+        self.dropout = dropout
 
     def __call__(self, e, source, xy_mask, yy_mask):
         for name, layer in self.layer_names:
+            layer.set_dropout(self.dropout)
             e = layer(e, source, xy_mask, yy_mask)
         return e
 
 
 class Transformer(object):
     def __init__(self, dy_model, n_layers, n_source_vocab, n_target_vocab, n_units,
-                 h=8, dropout=0.1, max_length=500,
+                 h=8, max_length=500,
                  use_label_smoothing=False,
                  embed_position=False):
 
         self.embed_x = dy_model.add_lookup_parameters((n_source_vocab, n_units))
         self.embed_y = dy_model.add_lookup_parameters((n_target_vocab, n_units))
 
-        self.encoder = Encoder(dy_model, n_layers, n_units, h, dropout)
-        self.decoder = Decoder(dy_model, n_layers, n_units, h, dropout)
+        self.encoder = Encoder(dy_model, n_layers, n_units, h)
+        self.decoder = Decoder(dy_model, n_layers, n_units, h)
 
         # TODO: Implement the feature of position embedding
 
@@ -324,7 +345,6 @@ class Transformer(object):
         self.xp = np
         self.n_units = n_units
         self.n_target_vocab = n_target_vocab
-        self.dropout = dropout
         self.use_label_smoothing = use_label_smoothing
         self.initialize_position_encoding(max_length, n_units)
         self.scale_emb = self.n_units ** 0.5
@@ -408,6 +428,9 @@ class Transformer(object):
 
         return loss
 
+    def set_dropout(self, dropout):
+        self.dropout = dropout
+
     def __call__(self, x_block, y_in_block, y_out_block, get_prediction=False):
         dy.renew_cg()
         batch, x_length = x_block.shape
@@ -424,10 +447,12 @@ class Transformer(object):
         yy_mask *= self.make_history_mask(y_in_block)
 
         # Encode Sources
+        self.encoder.set_dropout(self.dropout)
         z_blocks = self.encoder(ex_block, xx_mask)
         # [(batch, n_units, x_length), ...]
 
         # Encode Targets with Sources (Decode without Output)
+        self.decoder.set_dropout(self.dropout)
         h_block = self.decoder(ey_block, z_blocks, xy_mask, yy_mask)
         # (batch, n_units, y_length)
 

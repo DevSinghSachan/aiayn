@@ -215,7 +215,6 @@ def main():
                             min(len(target_ids), len(target_words)),
                             args.unit,
                             h=args.head,
-                            dropout=args.dropout,
                             max_length=500,
                             use_label_smoothing=args.use_label_smoothing,
                             embed_position=args.embed_position)
@@ -240,6 +239,7 @@ def main():
         # Dynet Training Code:
         train_batch = train_iter.next()
         in_arrays = seq2seq_pad_concat_convert(train_batch, args.gpu)
+        model.set_dropout(args.dropout)
         loss = model(*in_arrays)
 
         loss.backward()
@@ -262,6 +262,7 @@ def main():
                 in_arrays = seq2seq_pad_concat_convert(test_batch, args.gpu)
 
                 # Forward the test data
+                model.set_dropout(0.0)
                 loss_test = model(*in_arrays)
 
                 # Calculate the accuracy
