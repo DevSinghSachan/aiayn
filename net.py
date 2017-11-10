@@ -85,7 +85,6 @@ def sentence_block_embed(embed, x):
     batch, length = x.shape
     units, _ = embed.shape()
     # _, units = embed.shape()  # According to updated Dynet
-    # Z = dy.zeros(units)
 
     y = np.copy(x)
     y[x < 0] = 0
@@ -210,7 +209,8 @@ class MultiHeadAttention():
         if sent_len == 1:
             batch_A = dy.softmax(batch_A)
         else:
-            batch_A = dy.transpose(dy.softmax(dy.transpose(batch_A)))
+            # batch_A = dy.transpose(dy.softmax(dy.transpose(batch_A)))
+            batch_A = dy.softmax(batch_A, d=1)
 
         # TODO: Check whether this is correct after masking
         batch_A = dy.cmult(batch_A, mask)
