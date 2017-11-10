@@ -97,9 +97,11 @@ def sentence_block_embed(embed, x):
 
     # Z = dy.zeros(units)
     e = dy.concatenate_cols([dy.zeros(units) if id_ == -1 else embed[id_] for id_ in x.reshape((batch * length,))])
+    assert (e.dim() == ((units, batch * length), 1))
+
     # e = dy.lookup_batch(embed, y.reshape((batch * length,)))
-    # assert (e.dim() == ((units, batch * length), 1))
-    assert (e.dim() == ((units,), batch * length))
+    # assert (e.dim() == ((units,), batch * length))
+
     e = dy.reshape(e, (units, length), batch_size=batch)
 
     assert (e.dim() == ((units, length), batch))
