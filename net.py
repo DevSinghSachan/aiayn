@@ -70,13 +70,14 @@ class LayerNorm(object):
         self.p_b = dy_model.add_parameters(dim=d_hid, init=dy.ConstInitializer(0.0))
 
     def __call__(self, input_expr):
-        g = dy.parameter(self.p_g)
-        b = dy.parameter(self.p_b)
-
-        (_, seq_len), batch_size = input_expr.dim()
-        input = TimeDistributed()(input_expr)
-        output = dy.layer_norm(input, g, b)
-        return ReverseTimeDistributed()(output, seq_len, batch_size)
+        # g = dy.parameter(self.p_g)
+        # b = dy.parameter(self.p_b)
+        #
+        # (_, seq_len), batch_size = input_expr.dim()
+        # input = TimeDistributed()(input_expr)
+        # output = dy.layer_norm(input, g, b)
+        # return ReverseTimeDistributed()(output, seq_len, batch_size)
+        return input_expr
 
 
 def sentence_block_embed(embed, x):
