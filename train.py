@@ -246,7 +246,7 @@ def main():
         optimizer.update()
 
         if num_steps % 200 == 0:
-            print("epoch:{:02f}/{:02d}\tsteps: {}\ttrain_loss:{:.04f}\tlr:{}\t{} sec".format(train_iter.epoch_detail,
+            print("epoch: {:.03f}/{:02d}\tsteps: {}\ttrain_loss: {:.04f}\tlr: {:.05f}\t time: {:.01f} sec".format(train_iter.epoch_detail,
                                                                                              train_iter.epoch + 1,
                                                                                              num_steps,
                                                                                              loss.value(),
