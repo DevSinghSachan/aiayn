@@ -218,7 +218,8 @@ class MultiHeadAttention():
 
         # TODO: Check if attention dropout needs to be applied here
         # batch_C = dy.transpose(batch_A * dy.transpose(batch_V))
-        batch_C = batch_V * dy.transpose(batch_A)
+
+        batch_C = batch_V * dy.transpose(batch_A)  # TODO: Check the correctness of this step
         assert (batch_C.dim() == ((n_units // h, n_querys), batch * h))
 
         C = dy.concatenate(split_batch(batch_C, h), d=0)

@@ -7,6 +7,7 @@ import dynet as dy
 import numpy as np
 from nltk.translate import bleu_score
 import six
+from time import time
 import chainer
 from chainer.dataset import convert
 import preprocess
@@ -230,8 +231,11 @@ def main():
     iter_per_epoch = len(train_data) // args.batchsize
     print('Number of iter/epoch =', iter_per_epoch)
 
+    num_steps = 0
+    time_s = time()
     while train_iter.epoch < args.epoch:
         # dy.renew_cg()
+        num_steps += 1
         # ---------- One iteration of the training loop ----------
         # Dynet Training Code:
         train_batch = train_iter.next()
@@ -241,11 +245,12 @@ def main():
         loss.backward()
         optimizer.update()
 
-        print(
-            'epoch:{:02f}/{:02d}\ttrain_loss:{:.04f}\tlr:{}'.format(train_iter.epoch_detail,
-                                                                    train_iter.epoch + 1,
-                                                                    loss.value(),
-                                                                    optimizer.optimizer.learning_rate))
+        if num_steps % 200 == 0:
+            print("epoch:{:02f}/{:02d}\ttrain_loss:{:.04f}\tlr:{}\t{} sec".format(train_iter.epoch_detail,
+                                                                                  train_iter.epoch + 1,
+                                                                                  loss.value(),
+                                                                                  optimizer.optimizer.learning_rate,
+                                                                                  time() - time_s))
 
         # Check the validation accuracy of prediction after every epoch
         if train_iter.is_new_epoch:  # If this iteration is the final iteration of the current epoch
