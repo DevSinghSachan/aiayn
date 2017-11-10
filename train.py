@@ -247,8 +247,8 @@ def main():
 
         if num_steps % 200 == 0:
             print("epoch:{:02f}/{:02d}\tsteps: {}\ttrain_loss:{:.04f}\tlr:{}\t{} sec".format(train_iter.epoch_detail,
-                                                                                             num_steps,
                                                                                              train_iter.epoch + 1,
+                                                                                             num_steps,
                                                                                              loss.value(),
                                                                                              optimizer.optimizer.learning_rate,
                                                                                              time() - time_s))
