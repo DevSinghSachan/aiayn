@@ -229,6 +229,8 @@ def main():
     iter_per_epoch = len(train_data) // args.batchsize
     print('Number of iter/epoch =', iter_per_epoch)
 
+    print("epoch \t steps \t train_loss \t lr \t time")
+
     num_steps = 0
     time_s = time()
     while train_iter.epoch < args.epoch:
@@ -252,8 +254,8 @@ def main():
                                                                                              optimizer.optimizer.learning_rate,
                                                                                              time() - time_s))
 
-        if num_steps % 800 == 0:
-            CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize)()
+        if num_steps % (iter_per_epoch // 2) == 0:
+            CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize/4)()
 
         # Check the validation accuracy of prediction after every epoch
         if train_iter.is_new_epoch:  # If this iteration is the final iteration of the current epoch
@@ -279,8 +281,7 @@ def main():
 
             print('val_loss:{:.04f}'.format(np.mean(test_losses)))
 
-            CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize)()
-
+            # CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize)()
             ############################################################
 
 
