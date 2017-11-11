@@ -70,15 +70,15 @@ class LayerNorm(object):
         self.p_b = dy_model.add_parameters(dim=d_hid)
 
     def __call__(self, input_expr):
-        g = dy.parameter(self.p_g)
-        b = dy.parameter(self.p_b)
+        # g = dy.parameter(self.p_g)
+        # b = dy.parameter(self.p_b)
+        #
+        # (_, seq_len), batch_size = input_expr.dim()
+        # input = TimeDistributed()(input_expr)
+        # output = dy.layer_norm(input, g, b)
+        # return ReverseTimeDistributed()(output, seq_len, batch_size)
 
-        (_, seq_len), batch_size = input_expr.dim()
-        input = TimeDistributed()(input_expr)
-        output = dy.layer_norm(input, g, b)
-        return ReverseTimeDistributed()(output, seq_len, batch_size)
-
-        # return input_expr
+        return input_expr
 
 
 def sentence_block_embed(embed, x):
@@ -230,8 +230,8 @@ class FeedForwardLayer():
         self.W_2 = Linear(dy_model, n_inner_units, n_units)
 
         # TODO: Put Leaky Relu here
-        # self.act = dy.rectify
-        self.act = dy.elu
+        self.act = dy.rectify
+        # self.act = dy.elu
 
     def __call__(self, e):
         e = self.W_1(e, reconstruct_shape=False, timedistributed=True)
