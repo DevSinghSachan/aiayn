@@ -48,7 +48,7 @@ class Linear_nobias(object):
     def __init__(self, dy_model, input_dim, output_dim):
         self.W1 = dy_model.add_parameters((output_dim, input_dim))
         self.output_dim = output_dim
-        self.b1 = dy_model.add_parameters(output_dim)
+        # self.b1 = dy_model.add_parameters(output_dim)
 
     def __call__(self, input_expr):
         W1 = dy.parameter(self.W1)
@@ -58,7 +58,7 @@ class Linear_nobias(object):
 
         output = dy.affine_transform([b1, W1, input_expr])
 
-        if seq_len == 1: # This is helpful when sequence length is 1 especially during decoding
+        if seq_len == 1: # This is helpful when sequence length is 1, especially during decoding
             output = ReverseTimeDistributed()(output, seq_len, batch_size)
 
         return output
@@ -66,18 +66,18 @@ class Linear_nobias(object):
 
 class LayerNorm(object):
     def __init__(self, dy_model, d_hid):
-        self.p_g = dy_model.add_parameters(dim=d_hid, init=dy.ConstInitializer(1.0))
-        self.p_b = dy_model.add_parameters(dim=d_hid, init=dy.ConstInitializer(0.0))
+        self.p_g = dy_model.add_parameters(dim=d_hid)
+        self.p_b = dy_model.add_parameters(dim=d_hid)
 
     def __call__(self, input_expr):
-        # g = dy.parameter(self.p_g)
-        # b = dy.parameter(self.p_b)
-        #
-        # (_, seq_len), batch_size = input_expr.dim()
-        # input = TimeDistributed()(input_expr)
-        # output = dy.layer_norm(input, g, b)
-        # return ReverseTimeDistributed()(output, seq_len, batch_size)
-        return input_expr
+        g = dy.parameter(self.p_g)
+        b = dy.parameter(self.p_b)
+
+        (_, seq_len), batch_size = input_expr.dim()
+        input = TimeDistributed()(input_expr)
+        output = dy.layer_norm(input, g, b)
+        return ReverseTimeDistributed()(output, seq_len, batch_size)
+        # return input_expr
 
 
 def sentence_block_embed(embed, x):
@@ -93,8 +93,8 @@ def sentence_block_embed(embed, x):
     # units, _ = embed.shape()
     _, units = embed.shape()  # According to updated Dynet
 
-    y = np.copy(x)
-    y[x < 0] = 0
+    # y = np.copy(x)
+    # y[x < 0] = 0
 
     # Z = dy.zeros(units)
     e = dy.concatenate_cols([dy.zeros(units) if id_ == -1 else embed[id_] for id_ in x.reshape((batch * length,))])
