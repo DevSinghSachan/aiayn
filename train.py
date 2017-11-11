@@ -223,6 +223,8 @@ def main():
     # optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
     optimizer = AIAYNAdamTrainer(dy_model)
 
+    CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize)()
+
     # Setup Trainer
     train_iter = chainer.iterators.SerialIterator(train_data, args.batchsize)
     test_iter = chainer.iterators.SerialIterator(test_data, args.batchsize, repeat=False, shuffle=False)
