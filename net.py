@@ -229,7 +229,8 @@ class FeedForwardLayer():
         self.W_2 = Linear(dy_model, n_inner_units, n_units)
 
         # TODO: Put Leaky Relu here
-        self.act = dy.rectify
+        # self.act = dy.rectify
+        self.act = dy.elu
 
     def __call__(self, e):
         e = self.W_1(e, reconstruct_shape=False, timedistributed=True)
@@ -257,7 +258,6 @@ class EncoderLayer():
         sub = self.feed_forward(e)
         e = e + dy.dropout(sub, self.dropout)
         e = self.ln_2(e)
-
         return e
 
 
