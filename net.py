@@ -226,10 +226,7 @@ class FeedForwardLayer():
         n_inner_units = n_units * 4
         self.W_1 = Linear(dy_model, n_units, n_inner_units)
         self.W_2 = Linear(dy_model, n_inner_units, n_units)
-
-        # TODO: Put Leaky Relu here
-        self.act = dy.rectify
-        # self.act = dy.elu
+        self.act = dy.rectify  # TODO: experiment with Leaky Relu here
 
     def __call__(self, e):
         e = self.W_1(e, reconstruct_shape=False, timedistributed=True)

@@ -220,10 +220,7 @@ def main():
                             embed_position=args.embed_position)
 
     # Setup Optimizer
-    # optimizer = dy.AdamTrainer(dy_model, alpha=0.001)
     optimizer = AIAYNAdamTrainer(dy_model)
-
-    CalculateBleu(model, test_data, 'val/main/bleu', device=args.gpu, batch=args.batchsize)()
 
     # Setup Trainer
     train_iter = chainer.iterators.SerialIterator(train_data, args.batchsize)
