@@ -48,11 +48,9 @@ class Linear_nobias(object):
     def __init__(self, dy_model, input_dim, output_dim):
         self.W1 = dy_model.add_parameters((output_dim, input_dim))
         self.output_dim = output_dim
-        # self.b1 = dy_model.add_parameters(output_dim)
 
     def __call__(self, input_expr):
         W1 = dy.parameter(self.W1)
-        # b1 = dy.parameter(self.b1)
         b1 = dy.zeros(self.output_dim)
         (_, seq_len), batch_size = input_expr.dim()
 
@@ -341,7 +339,7 @@ class Transformer(object):
 
         # TODO: Implement the feature of position embedding
 
-        self.output_affine = Linear(dy_model, n_units, n_target_vocab)
+        # self.output_affine = Linear(dy_model, n_units, n_target_vocab)
         self.n_layers = n_layers
         self.xp = np
         self.n_units = n_units
@@ -386,14 +384,21 @@ class Transformer(object):
         return history_mask
 
     def output(self, h_block):
-        concat_logit_block = self.output_affine(h_block, reconstruct_shape=False, timedistributed=True)
+        # concat_logit_block = self.output_affine(h_block, reconstruct_shape=False, timedistributed=True)
+
+        # Tying target word embedding and classifier layer
+        concat_logit_block = dy.affine_transform([dy.zeros(self.n_target_vocab),
+                                                  dy.transpose(dy.parameter(self.embed_y)), h_block])
         return concat_logit_block
 
     def output_and_loss(self, h_block, t_block):
         (units, length), batch = h_block.dim()
 
         # Output (all together at once for efficiency)
-        concat_logit_block = self.output_affine(h_block, reconstruct_shape=False)
+        # concat_logit_block = self.output_affine(h_block, reconstruct_shape=False)
+        concat_logit_block = dy.affine_transform([dy.zeros(self.n_target_vocab),
+                                                  dy.transpose(dy.parameter(self.embed_y)), TimeDistributed()(h_block)])
+
         (_,), rebatch = concat_logit_block.dim()
 
         concat_t_block = t_block.reshape((rebatch))
