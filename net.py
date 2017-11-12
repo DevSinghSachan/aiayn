@@ -6,6 +6,7 @@ import chainer.functions as F
 from train import source_pad_concat_convert
 
 MIN_VALUE = -10000
+linear_init = lambda x: dy.UniformInitializer(np.sqrt(3./x))
 
 
 class TimeDistributed(object):
@@ -24,8 +25,8 @@ class ReverseTimeDistributed(object):
 
 class Linear(object):
     def __init__(self, dy_model, input_dim, output_dim):
-        self.W1 = dy_model.add_parameters((output_dim, input_dim))
-        self.b1 = dy_model.add_parameters(output_dim)
+        self.W1 = dy_model.add_parameters((output_dim, input_dim), init=linear_init(input_dim))
+        self.b1 = dy_model.add_parameters(output_dim, init=linear_init(output_dim))
 
     def __call__(self, input_expr, reconstruct_shape=True, timedistributed=False):
         W1 = dy.parameter(self.W1)
@@ -46,7 +47,7 @@ class Linear(object):
 
 class Linear_nobias(object):
     def __init__(self, dy_model, input_dim, output_dim):
-        self.W1 = dy_model.add_parameters((output_dim, input_dim))
+        self.W1 = dy_model.add_parameters((output_dim, input_dim), init=linear_init(input_dim))
         self.output_dim = output_dim
 
     def __call__(self, input_expr):
@@ -141,21 +142,19 @@ class MultiHeadAttention():
 
     def __init__(self, dy_model, n_units, h=8, self_attention=True):
         # TODO: keep bias = False
-        # self.W_Q = Linear(dy_model, n_units, n_units)
-        # self.W_K = Linear(dy_model, n_units, n_units)
-        # self.W_V = Linear(dy_model, n_units, n_units)
+        self.W_Q = Linear_nobias(dy_model, n_units, n_units)
+        self.W_K = Linear_nobias(dy_model, n_units, n_units)
+        self.W_V = Linear_nobias(dy_model, n_units, n_units)
 
-        if self_attention:
-            self.W_QKV = Linear_nobias(dy_model, n_units, n_units * 3)
-        else:
-            self.W_Q = Linear_nobias(dy_model, n_units, n_units)
-            self.W_KV = Linear_nobias(dy_model, n_units, n_units * 2)
+        # if self_attention:
+        #     self.W_QKV = Linear_nobias(dy_model, n_units, n_units * 3)
+        # else:
+        #     self.W_Q = Linear_nobias(dy_model, n_units, n_units)
+        #     self.W_KV = Linear_nobias(dy_model, n_units, n_units * 2)
 
         self.finishing_linear_layer = Linear_nobias(dy_model, n_units, n_units)
-
         self.h = h
         self.scale_score = 1. / (n_units // h) ** 0.5
-        # self.dropout = dropout
         self.is_self_attention = self_attention
 
     def set_dropout(self, dropout):
@@ -163,18 +162,17 @@ class MultiHeadAttention():
 
     def __call__(self, x, z=None, mask=None):
         h = self.h
-
         if self.is_self_attention:
-            Q, K, V = split_rows(self.W_QKV(x), 3)
-            # Q = self.W_Q(x)
-            # K = self.W_K(x)
-            # V = self.W_V(x)
-        else:
+            #     Q, K, V = split_rows(self.W_QKV(x), 3)
             Q = self.W_Q(x)
-            K, V = split_rows(self.W_KV(z), 2)
-            # Q = self.W_Q(x)
-            # K = self.W_K(z)
-            # V = self.W_V(z)
+            K = self.W_K(x)
+            V = self.W_V(x)
+        else:
+            #     Q = self.W_Q(x)
+            #     K, V = split_rows(self.W_KV(z), 2)
+            Q = self.W_Q(x)
+            K = self.W_K(z)
+            V = self.W_V(z)
 
         (n_units, n_querys), batch = Q.dim()
         (_, n_keys), _ = K.dim()
@@ -328,14 +326,14 @@ class Transformer(object):
                  use_label_smoothing=False,
                  embed_position=False):
 
-        self.embed_x = dy_model.add_lookup_parameters((n_source_vocab, n_units))
-        self.embed_y = dy_model.add_lookup_parameters((n_target_vocab, n_units))
+        self.embed_x = dy_model.add_lookup_parameters((n_source_vocab, n_units), init=linear_init(n_source_vocab))
+        self.embed_y = dy_model.add_lookup_parameters((n_target_vocab, n_units), init=linear_init(n_target_vocab))
 
         self.encoder = Encoder(dy_model, n_layers, n_units, h)
         self.decoder = Decoder(dy_model, n_layers, n_units, h)
 
         # TODO: Implement the feature of position embedding
-        self.embed_pos = dy_model.add_lookup_parameters((max_length, n_units))
+        # self.embed_pos = dy_model.add_lookup_parameters((max_length, n_units), init=linear_init(max_length))
 
         # self.output_affine = Linear(dy_model, n_units, n_target_vocab)
         self.n_layers = n_layers
@@ -362,11 +360,11 @@ class Transformer(object):
     def make_input_embedding(self, embed, block):
         batch, length = block.shape
         emb_block = sentence_block_embed(embed, block) * self.scale_emb
-        # emb_block += dy.inputTensor(self.position_encoding_block[0, :, :length])
+        emb_block += dy.inputTensor(self.position_encoding_block[0, :, :length])
 
         # TODO: If position embedding, incorporate it here.
-        emb_block += sentence_block_embed(self.embed_pos,
-                                          self.xp.broadcast_to(self.xp.arange(length).astype('i')[None, :], block.shape))
+        # emb_block += sentence_block_embed(self.embed_pos,
+        #                                   self.xp.broadcast_to(self.xp.arange(length).astype('i')[None, :], block.shape))
 
         emb_block = dy.dropout(emb_block, self.dropout)
         return emb_block
