@@ -105,8 +105,6 @@ class CalculateBleu(object):
         for i in range(0, len(self.test_data), self.batch):
             sources, targets = zip(*self.test_data[i:i + self.batch])
             references.extend([[t.tolist()] for t in targets])
-
-            # sources = [chainer.dataset.to_device(self.device, x) for x in sources]
             sources = [x for x in sources]
 
             ys = [y.tolist() for y in self.model.translate(sources, self.max_length, beam=False)]
@@ -228,16 +226,14 @@ def main():
 
     iter_per_epoch = len(train_data) // args.batchsize
     print('Number of iter/epoch =', iter_per_epoch)
-
     print("epoch \t steps \t train_loss \t lr \t time")
 
     num_steps = 0
     time_s = time()
     while train_iter.epoch < args.epoch:
-        # dy.renew_cg()
         num_steps += 1
+
         # ---------- One iteration of the training loop ----------
-        # Dynet Training Code:
         train_batch = train_iter.next()
         in_arrays = seq2seq_pad_concat_convert(train_batch, args.gpu)
         model.set_dropout(args.dropout)
@@ -261,7 +257,6 @@ def main():
         if train_iter.is_new_epoch:  # If this iteration is the final iteration of the current epoch
             test_losses = []
             while True:
-                # dy.renew_cg()
                 test_batch = test_iter.next()
                 in_arrays = seq2seq_pad_concat_convert(test_batch, args.gpu)
 

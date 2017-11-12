@@ -335,6 +335,7 @@ class Transformer(object):
         self.decoder = Decoder(dy_model, n_layers, n_units, h)
 
         # TODO: Implement the feature of position embedding
+        self.embed_pos = dy_model.add_lookup_parameters((max_length, n_units))
 
         # self.output_affine = Linear(dy_model, n_units, n_target_vocab)
         self.n_layers = n_layers
@@ -361,8 +362,12 @@ class Transformer(object):
     def make_input_embedding(self, embed, block):
         batch, length = block.shape
         emb_block = sentence_block_embed(embed, block) * self.scale_emb
-        emb_block += dy.inputTensor(self.position_encoding_block[0, :, :length])
+        # emb_block += dy.inputTensor(self.position_encoding_block[0, :, :length])
+
         # TODO: If position embedding, incorporate it here.
+        emb_block += sentence_block_embed(self.embed_pos,
+                                          self.xp.broadcast_to(self.xp.arange(length).astype('i')[None, :], block.shape))
+
         emb_block = dy.dropout(emb_block, self.dropout)
         return emb_block
 
@@ -385,7 +390,8 @@ class Transformer(object):
 
         # Tying target word embedding and classifier layer
         concat_logit_block = dy.affine_transform([dy.zeros(self.n_target_vocab),
-                                                  dy.transpose(dy.parameter(self.embed_y)), h_block])
+                                                  dy.transpose(dy.parameter(self.embed_y)),
+                                                  h_block])
         return concat_logit_block
 
     def output_and_loss(self, h_block, t_block):
@@ -394,7 +400,8 @@ class Transformer(object):
         # Output (all together at once for efficiency)
         # concat_logit_block = self.output_affine(h_block, reconstruct_shape=False)
         concat_logit_block = dy.affine_transform([dy.zeros(self.n_target_vocab),
-                                                  dy.transpose(dy.parameter(self.embed_y)), TimeDistributed()(h_block)])
+                                                  dy.transpose(dy.parameter(self.embed_y)),
+                                                  TimeDistributed()(h_block)])
 
         (_,), rebatch = concat_logit_block.dim()
 
@@ -471,15 +478,12 @@ class Transformer(object):
         # if beam:
         #     return self.translate_beam(x_block, max_length, beam)
 
-        # TODO: efficient inference by re-using result
         x_block = source_pad_concat_convert(x_block, device=None)
         batch, x_length = x_block.shape
-        # y_block = self.xp.zeros((batch, 1), dtype=x_block.dtype)
         y_block = self.xp.full((batch, 1), 2, dtype=x_block.dtype)  # bos
         eos_flags = self.xp.zeros((batch,), dtype=x_block.dtype)
         result = []
         for i in range(max_length):
-            # print(i)
             self.set_dropout(0.0)
             log_prob_tail = self(x_block, y_block, y_block, get_prediction=True)
             ys = self.xp.argmax(log_prob_tail.npvalue(), axis=0).astype('i')
@@ -490,7 +494,6 @@ class Transformer(object):
                 break
 
         result = self.xp.stack(result).T
-
         # Remove EOS taggs
         outs = []
         for y in result:
