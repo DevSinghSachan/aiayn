@@ -189,7 +189,7 @@ def main():
                   if 0 < len(s) < 50 and 0 < len(t) < 50]
     print('Filtered training data size: %d' % len(train_data))
 
-    train_data = sorted(train_data, key=lambda x: len(x[0]))
+    # train_data = sorted(train_data, key=lambda x: len(x[0]))
 
     src_path = os.path.join(args.input, args.source_valid)
     source_data = preprocess.make_dataset(src_path, source_vocab)
@@ -223,7 +223,7 @@ def main():
     optimizer = AIAYNAdamTrainer(dy_model)
 
     # Setup Trainer
-    train_iter = chainer.iterators.SerialIterator(train_data, args.batchsize, shuffle=False)
+    train_iter = chainer.iterators.SerialIterator(train_data, args.batchsize)
     test_iter = chainer.iterators.SerialIterator(test_data, args.batchsize, repeat=False, shuffle=False)
 
     iter_per_epoch = len(train_data) // args.batchsize
