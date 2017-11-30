@@ -463,7 +463,6 @@ class Transformer(object):
         # Encode Targets with Sources (Decode without Output)
         self.decoder.set_dropout(self.dropout)
         h_block = self.decoder(ey_block, z_blocks, xy_mask, yy_mask)
-        # (batch, n_units, y_length)
 
         if get_prediction:
             y_len = h_block.dim()[0][1]
